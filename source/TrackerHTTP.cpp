@@ -49,8 +49,6 @@ AnnounceResponseHTTP TrackerHTTP::Get(boost::asio::yield_context yield,
         std::cerr << "Error reading response: " << ec.message() << std::endl;
         return {};
     }
-
-    std::cout << "Response: " << res << std::endl;
-
+    
     return AnnounceResponseHTTP{res.body()};
 }

@@ -18,6 +18,7 @@ add_executable(MyProject
     source/TrackerHTTP.cpp
     source/TrackerUDP.cpp
     source/AnnounceResponseHTTP.cpp
-    source/AnnounceResponseUDP.cpp)
+    source/AnnounceResponseUDP.cpp
+    source/ConnectionManager.cpp)
 
 target_link_libraries(MyProject PRIVATE Boost::boost boost_coroutine LibtorrentRasterbar::torrent-rasterbar)

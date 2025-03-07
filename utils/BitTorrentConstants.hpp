@@ -4,7 +4,7 @@ namespace utils
 {
     const int BLOCK_SIZE = 16 * 1024;
     /// @brief BitTorrent protocol ID
-    const int PROTOCOL_ID = 19;
+    const int8_t PROTOCOL_ID = 19;
 
     const int HANDSHAKE_LENGTH = 68;
 

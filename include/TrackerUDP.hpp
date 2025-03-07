@@ -21,8 +21,8 @@ public:
     void Connect(boost::asio::yield_context yield, boost::system::error_code &ec);
 
     AnnounceResponseUDP Get(boost::asio::yield_context yield,
-             std::unordered_map<std::string, std::string> &data,
-             boost::system::error_code &ec);
+                            std::unordered_map<std::string, std::string> &data,
+                            boost::system::error_code &ec);
 
 private:
     boost::asio::ip::udp::socket m_socket;
