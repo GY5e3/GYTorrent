@@ -4,30 +4,28 @@
 #include <boost/asio.hpp>
 #include <boost/asio/spawn.hpp>
 
-#include <libtorrent/torrent_info.hpp>
-
 #include "../include/TorrentMetaData.hpp"
 #include "../include/TrackerHTTP.hpp"
 #include "../include/TrackerUDP.hpp"
+
+#include "../include/AnnounceResponseHTTP.hpp"
 
 #include "../utils/Functors/GeneratorPeerID.hpp"
 
 int main(int argc, char *argv[])
 {
-    //lt::error_code ec;
-    //lt::torrent_info ti("../_input/duna.torrent");
 
 
-    TorrentMetaData tmd("../_input/duna.torrent");
-    //ti.trackers()[0].url;
+    TorrentMetaData tmd("../_input/28777.torrent");
+
     boost::asio::io_context io;
-    auto tracker = std::make_shared<TrackerHTTP>(io, tmd.GetTrackerURLs()[2]);
+    auto tracker = std::make_shared<TrackerHTTP>(io, tmd.GetTrackerURLs()[0]);
 
     for(auto i :  tmd.GetTrackerURLs())
         std::cout << i << std::endl;
 
-    auto tracker1 = std::make_shared<TrackerUDP>(io, tmd.GetTrackerURLs()[3]);
-    boost::asio::spawn(io, [tracker, tracker1, &tmd](boost::asio::yield_context yield)
+   // auto tracker1 = std::make_shared<TrackerUDP>(io, tmd.GetTrackerURLs()[3]);
+    boost::asio::spawn(io, [tracker, &tmd](boost::asio::yield_context yield)
                        {
         boost::system::error_code ec;
 
@@ -53,10 +51,24 @@ int main(int argc, char *argv[])
             {"compact", compact},
             {"event", event},
         };
-        tracker->Get(yield, data, ec);
         
-        tracker1->Connect(yield, ec);
-        tracker1->Get(yield, data, ec); 
+        AnnounceResponseHTTP response = tracker->Get(yield, data, ec);
+
+        std::cout << std::endl;
+
+        std::cout << "complete: " << response.GetSeeders() << std::endl << std::endl;
+
+        std::cout << "incomlete: " << response.GetLeechers() << std::endl << std::endl;
+
+        std::cout << "interval: " << response.GetInterval() << std::endl << std::endl;
+
+        std::cout << "peers:" << std::endl;
+        for (const auto& peer : response.GetPeers())
+        {
+            std::cout << peer.GetID() << " " << peer.ToString() << std::endl;
+        }
+        //tracker1->Connect(yield, ec);
+        //tracker1->Get(yield, data, ec); 
         });
 
     io.run();

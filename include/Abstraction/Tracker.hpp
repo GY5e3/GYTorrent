@@ -1,15 +1,16 @@
 #pragma once
 
+#include <iomanip>
 #include <string>
 #include <regex>
 #include <boost/enable_shared_from_this.hpp>
 
 #include <boost/asio.hpp>
 
-class AbstractTracker : public std::enable_shared_from_this<AbstractTracker>
+class Tracker : public std::enable_shared_from_this<Tracker>
 {
 public:
-    AbstractTracker(boost::asio::io_context &io, const std::string &trackerURL) : m_io(io)
+    Tracker(boost::asio::io_context &io, const std::string &trackerURL) : m_io(io)
     {
         getHostAndPortFromURL(trackerURL);
     }

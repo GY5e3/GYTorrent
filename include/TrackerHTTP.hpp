@@ -8,16 +8,17 @@
 #include <boost/asio/spawn.hpp>
 #include <boost/beast.hpp>
 
-#include "AbstractTracker.hpp"
+#include "Abstraction/Tracker.hpp"
+#include "AnnounceResponseHTTP.hpp"
 
-class TrackerHTTP : public AbstractTracker
+class TrackerHTTP : public Tracker
 {
 public:
     TrackerHTTP(boost::asio::io_context &io, const std::string &trackerURL);
 
     void Connect(boost::asio::yield_context yield, boost::system::error_code &ec);
 
-    void Get(boost::asio::yield_context yield,
+    AnnounceResponseHTTP Get(boost::asio::yield_context yield,
              std::unordered_map<std::string, std::string> &data,
              boost::system::error_code &ec);
              

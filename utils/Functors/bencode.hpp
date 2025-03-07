@@ -107,7 +107,7 @@ namespace bencode
             {
                 if (m_state == State::FINAL)
                     throw std::runtime_error("Something went wrong...");
-                std::cout << str[index] << " " << static_cast<std::underlying_type<State>::type>(m_state) << std::endl;
+                //std::cout << str[index] << " " << static_cast<std::underlying_type<State>::type>(m_state) << std::endl;
                 index += action(str[index]);
             }
             if (m_state != State::FINAL)
@@ -207,7 +207,6 @@ namespace bencode
                 else if (c == ':')
                 {
                     m_strLen = std::stoll(m_buffer);
-                    std::cout << m_buffer << " " << m_strLen<< std::endl;
                     m_buffer = "";
                     
 

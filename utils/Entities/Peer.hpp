@@ -8,15 +8,19 @@ namespace utils
     {
     public:
         Peer() = default;
-        Peer(const std::string& peerIP, const std::string& peerPort) : m_peerIP(peerIP), m_peerPort(peerPort) {}
+        Peer(const std::string &peerIP, const std::string &peerPort, const std::string &peerID = "") : m_IP(peerIP),
+                                                                                                       m_port(peerPort),
+                                                                                                       m_ID(peerID) {}
 
-        std::string ToString() const { return m_peerIP + " " + m_peerPort; }
+        std::string ToString() const { return m_IP + ":" + m_port; }
 
-        std::string GetPeerIP() const { return m_peerIP; }
-        std::string GetPeerPort() const { return m_peerPort; }
+        std::string GetID() const { return m_ID; }
+        std::string GetIP() const { return m_IP; }
+        std::string GetPort() const { return m_port; }
 
     private:
-        std::string m_peerIP;
-        std::string m_peerPort;
+        std::string m_ID;
+        std::string m_IP;
+        std::string m_port;
     };
 }

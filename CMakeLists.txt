@@ -9,12 +9,14 @@ find_package(LibtorrentRasterbar CONFIG REQUIRED)
 
 include_directories(
     ${PROJECT_SOURCE_DIR}/include
+    ${PROJECT_SOURCE_DIR}/include/Abstraction
     ${PROJECT_SOURCE_DIR}/utils)
 
 add_executable(MyProject
     source/main.cpp
     source/TorrentMetaData.cpp
     source/TrackerHTTP.cpp
-    source/TrackerUDP.cpp)
+    source/TrackerUDP.cpp
+    source/AnnounceResponseHTTP.cpp)
 
 target_link_libraries(MyProject PRIVATE Boost::boost boost_coroutine LibtorrentRasterbar::torrent-rasterbar)

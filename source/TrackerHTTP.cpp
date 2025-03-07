@@ -1,6 +1,6 @@
 #include "TrackerHTTP.hpp"
 
-TrackerHTTP::TrackerHTTP(boost::asio::io_context &io, const std::string &trackerURL) : AbstractTracker(io, trackerURL),
+TrackerHTTP::TrackerHTTP(boost::asio::io_context &io, const std::string &trackerURL) : Tracker(io, trackerURL),
                                                                                        m_stream(io)
 {
 }
@@ -19,7 +19,7 @@ void TrackerHTTP::Connect(boost::asio::yield_context yield, boost::system::error
     std::cout << "Connected to tracker at " << m_host << ":" << m_port << std::endl;
 }
 
-void TrackerHTTP::Get(boost::asio::yield_context yield,
+AnnounceResponseHTTP TrackerHTTP::Get(boost::asio::yield_context yield,
                       std::unordered_map<std::string, std::string> &data,
                       boost::system::error_code &ec)
 {
@@ -38,7 +38,7 @@ void TrackerHTTP::Get(boost::asio::yield_context yield,
     if (ec)
     {
         std::cerr << "Error sending request: " << ec.message() << std::endl;
-        return;
+        return {};
     }
 
     boost::beast::flat_buffer buffer;
@@ -47,8 +47,10 @@ void TrackerHTTP::Get(boost::asio::yield_context yield,
     if (ec)
     {
         std::cerr << "Error reading response: " << ec.message() << std::endl;
-        return;
+        return {};
     }
 
     std::cout << "Response: " << res << std::endl;
+
+    return AnnounceResponseHTTP{res.body()};
 }

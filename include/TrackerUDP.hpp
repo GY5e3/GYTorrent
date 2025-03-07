@@ -8,9 +8,9 @@
 #include <boost/asio/spawn.hpp>
 #include <boost/beast.hpp>
 
-#include "AbstractTracker.hpp"
+#include "Abstraction/Tracker.hpp"
 
-class TrackerUDP : public AbstractTracker
+class TrackerUDP : public Tracker
 {
 public:
     TrackerUDP(boost::asio::io_context &io, const std::string &trackerURL);

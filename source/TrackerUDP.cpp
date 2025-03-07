@@ -1,6 +1,6 @@
 #include "TrackerUDP.hpp"
 
-TrackerUDP::TrackerUDP(boost::asio::io_context &io, const std::string &trackerURL) : AbstractTracker(io, trackerURL),
+TrackerUDP::TrackerUDP(boost::asio::io_context &io, const std::string &trackerURL) : Tracker(io, trackerURL),
                                                                                      m_socket(io, boost::asio::ip::udp::v4()) {}
 
 void TrackerUDP::Connect(boost::asio::yield_context yield, boost::system::error_code &ec)
