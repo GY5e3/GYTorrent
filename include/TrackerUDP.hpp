@@ -3,12 +3,15 @@
 #include <utility>
 #include <iostream>
 #include <unordered_map>
+#include <span>
 
 #include <boost/asio.hpp>
 #include <boost/asio/spawn.hpp>
 #include <boost/beast.hpp>
 
 #include "Abstraction/Tracker.hpp"
+
+#include "AnnounceResponseUDP.hpp"
 
 class TrackerUDP : public Tracker
 {
@@ -17,7 +20,7 @@ public:
 
     void Connect(boost::asio::yield_context yield, boost::system::error_code &ec);
 
-    void Get(boost::asio::yield_context yield,
+    AnnounceResponseUDP Get(boost::asio::yield_context yield,
              std::unordered_map<std::string, std::string> &data,
              boost::system::error_code &ec);
 

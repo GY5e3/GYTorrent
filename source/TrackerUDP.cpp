@@ -5,16 +5,10 @@ TrackerUDP::TrackerUDP(boost::asio::io_context &io, const std::string &trackerUR
 
 void TrackerUDP::Connect(boost::asio::yield_context yield, boost::system::error_code &ec)
 {
-    std::random_device rd;
-    std::mt19937 gen(rd());
-    std::uniform_int_distribution<> dis(0, 255);
     boost::asio::ip::udp::resolver resolver(m_io);
     auto endpoints = resolver.async_resolve(m_host, m_port, yield[ec]);
-    if (ec)
-    {
-        std::cerr << "resolve error: " << ec.message() << std::endl;
-        return;
-    }
+    if (ec) return;
+
     m_endpoint = *endpoints.begin();
 
     std::vector<unsigned char> request(16);
@@ -29,24 +23,13 @@ void TrackerUDP::Connect(boost::asio::yield_context yield, boost::system::error_
     setRandomIntValue(incomingTransactionID);
     buildRequest(request, 12, incomingTransactionID);
 
-    for (unsigned char byte : request)
-        std::cout << std::hex << std::setw(2) << std::setfill('0') << (int)byte << " ";
-    std::cout << std::endl;
-
     m_socket.async_send_to(boost::asio::buffer(request), m_endpoint, yield[ec]);
-    if (ec)
-    {
-        std::cerr << "send error: " << ec.message() << std::endl;
-        return;
-    }
+    if (ec) return;
 
     std::vector<unsigned char> response(16, '0');
     m_socket.async_receive_from(boost::asio::buffer(response), m_endpoint, yield[ec]);
-    if (ec)
-    {
-        std::cerr << "receive error: " << ec.message() << std::endl;
-        return;
-    }
+    if (ec) return;
+
     uint32_t outgoingAction = 0;
     for (int i = 0; i < 4; i++)
         outgoingAction |= static_cast<uint32_t>(response[i]) << (8 * (3 - i));
@@ -59,13 +42,13 @@ void TrackerUDP::Connect(boost::asio::yield_context yield, boost::system::error_
     for (int i = 0; i < 8; i++)
         m_connectionID |= static_cast<uint64_t>(response[i + 8]) << (8 * (7 - i));
 
-    std::cout << "Offset  Size            Name            Value" << std::endl;
-    std::cout << "0       32-bit integer  action          " << outgoingAction << " // connect" << std::endl;
-    std::cout << "4       32-bit integer  transaction_id  " << outgoingTransactionID << std::endl;
-    std::cout << "8       64-bit integer  connection_id   " << m_connectionID << std::endl;
+    if(incomingAction != outgoingAction || incomingTransactionID != outgoingTransactionID) {
+        ec.assign(boost::system::errc::bad_message, boost::system::system_category());
+        return;
+    }
 }
 
-void TrackerUDP::Get(boost::asio::yield_context yield,
+AnnounceResponseUDP TrackerUDP::Get(boost::asio::yield_context yield,
                      std::unordered_map<std::string, std::string> &data,
                      boost::system::error_code &ec)
 
@@ -108,29 +91,34 @@ void TrackerUDP::Get(boost::asio::yield_context yield,
 
     buildRequest(request, 96, static_cast<int16_t>(std::stoi(data["port"])));
 
-    for (unsigned char byte : request)
-        std::cout << std::hex << std::setw(2) << std::setfill('0') << (int)byte << " ";
-    std::cout << std::endl;
-    std::cout << std::endl;
-
     m_socket.async_send_to(boost::asio::buffer(request), m_endpoint, yield[ec]);
-    if (ec)
-    {
-        std::cerr << "send error: " << ec.message() << std::endl;
-        return;
+    if (ec) return {};
+    
+    std::vector<unsigned char> response(20 + 50 * 6, '\0');
+    size_t responseSize = m_socket.async_receive_from(boost::asio::buffer(response), m_endpoint, yield[ec]);
+    if (ec) return {};
+    else if(responseSize < 20) {
+        ec.assign(boost::system::errc::bad_message, boost::system::system_category());
+        return {};
+    }
+
+    response.resize(responseSize);
+
+    uint32_t outgoingAction = 0;
+    for (int i = 0; i < 4; i++)
+        outgoingAction |= static_cast<uint32_t>(response[i]) << (8 * (3 - i));
+
+    uint32_t outgoingTransactionID = 0;
+    for (int i = 0; i < 4; i++)
+        outgoingTransactionID |= static_cast<uint32_t>(response[i + 4]) << (8 * (3 - i));
+
+    if(incomingAction != outgoingAction || incomingTransactionID != outgoingTransactionID) {
+        ec.assign(boost::system::errc::bad_message, boost::system::system_category());
+        return {};
     }
     
-    std::vector<unsigned char> response(1024, '\0');
-    m_socket.async_receive_from(boost::asio::buffer(response), m_endpoint, yield[ec]);
-    if (ec)
-    {
-        std::cerr << "receive error: " << ec.message() << std::endl;
-        return;
-    }
-
-    for (unsigned char byte : response)
-        std::cout << std::hex << std::setw(2) << std::setfill('0') << (int)byte << " ";
-    std::cout << std::endl;
+    std::vector<unsigned char> responseBody(response.begin() + 8, response.end());
+    return AnnounceResponseUDP{responseBody};
 }
 //e4 5c 37 6e b1 9b 69 2f 00 00 00 01 44 9c 4b 57 8b b5 f3 93 a1 a9 34 8e f2 2c 2e 06 cc 3d 67 15 66 4d ba 59 2d 50 43 30 30 30 31 2d 38 34 36 38 39 31 39 33 39 38 32 38 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 02 00 00 00 00 6f cb 80 19 ff ff ff ff 1a e1
 //e4 5c 37 6e b1 9b 69 2f 00 00 00 01 2b b1 ae 74 8b b5 f3 93 a1 a9 34 8e f2 2c 2e 06 cc 3d 67 15 66 4d ba 59 2d 50 43 30 30 30 31 2d 33 31 32 34 32 31 30 35 33 33 37 38 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 02 00 00 00 00 99 e6 64 0d ff ff ff ff 1a e1
