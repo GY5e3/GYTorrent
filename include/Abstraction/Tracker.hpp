@@ -44,23 +44,4 @@ protected:
             }
         }
     }
-    std::string encodeURL(const std::string &str)
-    {
-        std::ostringstream escaped;
-        escaped.fill('0');
-        escaped << std::hex;
-
-        for (char c : str)
-        {
-            if (isalnum(static_cast<unsigned char>(c)) || c == '-' || c == '_' || c == '.' || c == '~')
-            {
-                escaped << c;
-            }
-            else
-            {
-                escaped << '%' << std::setw(2) << int((unsigned char)c);
-            }
-        }
-        return escaped.str();
-    }
 };

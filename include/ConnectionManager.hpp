@@ -13,15 +13,20 @@
 class ConnectionManager
 {
 public:
-    ConnectionManager(boost::asio::io_context &io, const TorrentMetaData& torrentInfo, const std::string& clientPeerID);
+    ConnectionManager(boost::asio::io_context &io, const TorrentMetaData &torrentInfo, const std::string &clientPeerID);
     void Init(boost::asio::ip::tcp::socket &socket,
               const utils::Peer &peer,
               boost::asio::yield_context yield,
               boost::system::error_code &ec);
-    boost::asio::ip::tcp::socket Listen();
+
+    void Listen(boost::asio::ip::tcp::socket &socket,
+                boost::asio::yield_context yield,
+                boost::system::error_code &ec,
+                int32_t port = 6881);
 
 private:
     boost::asio::io_context &m_io;
+    boost::asio::ip::tcp::acceptor m_acceptor;
     TorrentMetaData m_torrentInfo;
     std::string m_clientPeerID;
 };

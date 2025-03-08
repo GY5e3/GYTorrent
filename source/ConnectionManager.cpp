@@ -3,8 +3,11 @@
 ConnectionManager::ConnectionManager(boost::asio::io_context &io,
                                      const TorrentMetaData &torrentInfo,
                                      const std::string &clientPeerID) : m_io(io),
+                                                                        m_acceptor(io),
                                                                         m_torrentInfo(torrentInfo),
-                                                                        m_clientPeerID(clientPeerID) {}
+                                                                        m_clientPeerID(clientPeerID)
+{
+}
 
 void ConnectionManager::Init(boost::asio::ip::tcp::socket &socket,
                              const utils::Peer &peer,
@@ -29,16 +32,18 @@ void ConnectionManager::Init(boost::asio::ip::tcp::socket &socket,
 
     for (size_t i = 0; i < utils::TORRENT_HASH_LENGTH; i++)
         request[i + 1 + utils::PROTOCOL_ID + 8] = m_torrentInfo.GetInfoHash()[i];
-        
+
     for (size_t i = 0; i < m_clientPeerID.size(); i++)
         request[i + 1 + utils::PROTOCOL_ID + 8 + utils::TORRENT_HASH_LENGTH] = m_clientPeerID[i];
 
     size_t sendBytes = boost::asio::async_write(socket, boost::asio::buffer(request), yield[ec]);
-    if (ec) return;
+    if (ec)
+        return;
 
     std::string response(utils::HANDSHAKE_LENGTH, '\0');
     size_t responseBytes = boost::asio::async_read(socket, boost::asio::buffer(response), yield[ec]);
-    if(ec) return;
+    if (ec)
+        return;
     if (sendBytes != responseBytes)
     {
         ec.assign(boost::system::errc::bad_message, boost::system::system_category());
@@ -59,9 +64,36 @@ void ConnectionManager::Init(boost::asio::ip::tcp::socket &socket,
     for (size_t i = 0; i < responsePeerID.size(); i++)
         responsePeerID[i] = response[i + 1 + utils::PROTOCOL_ID + 8 + utils::TORRENT_HASH_LENGTH];
 
-    if(requstPrtcl != responsePrtcl || m_torrentInfo.GetInfoHash() != responseHash) 
+    if (requstPrtcl != responsePrtcl || m_torrentInfo.GetInfoHash() != responseHash)
     {
         ec.assign(boost::system::errc::bad_message, boost::system::system_category());
         return;
+    }
+}
+
+void ConnectionManager::Listen(boost::asio::ip::tcp::socket &socket,
+                               boost::asio::yield_context yield,
+                               boost::system::error_code &ec,
+                               int32_t port)
+{
+    m_acceptor.open(boost::asio::ip::tcp::v4());
+    m_acceptor.bind(boost::asio::ip::tcp::endpoint(boost::asio::ip::tcp::v4(), port));
+    m_acceptor.listen();
+
+    m_acceptor.async_accept(socket, yield[ec]);
+
+    if (ec)
+        return;
+
+    boost::asio::ip::tcp::endpoint remote_ep = socket.remote_endpoint(ec);
+    if (!ec)
+    {
+        std::cout << "Подключился клиент: "
+                  << remote_ep.address().to_string() << ":"
+                  << remote_ep.port() << std::endl;
+    }
+    else
+    {
+        std::cerr << "Ошибка при получении remote_endpoint: " << ec.message() << std::endl;
     }
 }

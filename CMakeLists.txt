@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.10)
 
 set(CMAKE_CXX_STANDARD 20)
 
-project(MyProject)
+project(Listener)
 
 find_package(Boost COMPONENTS ALL)
 find_package(LibtorrentRasterbar CONFIG REQUIRED)
@@ -12,7 +12,7 @@ include_directories(
     ${PROJECT_SOURCE_DIR}/include/Abstraction
     ${PROJECT_SOURCE_DIR}/utils)
 
-add_executable(MyProject
+add_executable(${PROJECT_NAME}
     source/main.cpp
     source/TorrentMetaData.cpp
     source/TrackerHTTP.cpp
@@ -21,4 +21,4 @@ add_executable(MyProject
     source/AnnounceResponseUDP.cpp
     source/ConnectionManager.cpp)
 
-target_link_libraries(MyProject PRIVATE Boost::boost boost_coroutine LibtorrentRasterbar::torrent-rasterbar)
+target_link_libraries(${PROJECT_NAME} PRIVATE Boost::boost boost_coroutine LibtorrentRasterbar::torrent-rasterbar)

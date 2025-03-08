@@ -24,4 +24,6 @@ public:
              
 private:
     boost::beast::tcp_stream m_stream;
+
+    std::string encodeURL(const std::string &str);
 };
