@@ -10,6 +10,8 @@
 #include "../utils/Entities/Peer.hpp"
 #include "../utils/BitTorrentConstants.hpp"
 
+#include "../utils/Functors/build_request.hpp"
+
 class ConnectionManager
 {
 public:
@@ -25,6 +27,8 @@ public:
                 int32_t port = 6881);
 
 private:
+    utils::build_request build_request;
+
     boost::asio::io_context &m_io;
     boost::asio::ip::tcp::acceptor m_acceptor;
     TorrentMetaData m_torrentInfo;

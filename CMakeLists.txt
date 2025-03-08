@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.10)
 
 set(CMAKE_CXX_STANDARD 20)
 
-project(Listener)
+project(test)
 
 find_package(Boost COMPONENTS ALL)
 find_package(LibtorrentRasterbar CONFIG REQUIRED)

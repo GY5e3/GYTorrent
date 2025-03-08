@@ -8,7 +8,7 @@ namespace utils
     @brief Generate PeerID for client
     @return PeerID in the format: -PC0001-dddddddddddd, where 'd' - digit in the range from 0 to 9
     */
-    class GeneratorPeerID
+    class generate_peer_id
     {
     public:
         std::string operator()()

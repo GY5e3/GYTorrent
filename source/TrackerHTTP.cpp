@@ -11,8 +11,7 @@ void TrackerHTTP::Connect(boost::asio::yield_context yield, boost::system::error
     const auto endpoints = resolver.async_resolve(m_host, m_port, yield[ec]);
 
     boost::asio::async_connect(m_stream.socket(), endpoints, yield[ec]);
-    if (ec)
-        return;
+    if (ec) return;
 }
 
 AnnounceResponseHTTP TrackerHTTP::Get(boost::asio::yield_context yield,
@@ -31,8 +30,7 @@ AnnounceResponseHTTP TrackerHTTP::Get(boost::asio::yield_context yield,
     request.set(boost::beast::http::field::host, m_host);
     request.set(boost::beast::http::field::user_agent, BOOST_BEAST_VERSION_STRING);
     boost::beast::http::async_write(m_stream, request, yield[ec]);
-    if (ec)
-        return {};
+    if (ec) return {};
 
     boost::beast::flat_buffer buffer;
     boost::beast::http::response<boost::beast::http::string_body> res;

@@ -18,32 +18,28 @@ void ConnectionManager::Init(boost::asio::ip::tcp::socket &socket,
     auto endpoints = resolver.async_resolve(peer.GetIP(), peer.GetPort(), yield[ec]);
 
     boost::asio::async_connect(socket, endpoints, yield[ec]);
-    if (ec)
-        return;
+    if (ec) return;
 
     std::vector<unsigned char> request(utils::HANDSHAKE_LENGTH, '\0');
 
     request[0] = utils::PROTOCOL_ID;
 
-    std::string requstPrtcl = "BitTorrent protocol";
+    std::string requstProtocol = "BitTorrent protocol";
+    build_request(request, 1, begin(requstProtocol), end(requstProtocol));
 
-    for (size_t i = 0; i < requstPrtcl.size(); i++)
-        request[i + 1] = requstPrtcl[i];
+    auto infoHash = m_torrentInfo.GetInfoHash();
+    build_request(request, 1 + utils::PROTOCOL_ID + 8, begin(infoHash), end(infoHash));
 
-    for (size_t i = 0; i < utils::TORRENT_HASH_LENGTH; i++)
-        request[i + 1 + utils::PROTOCOL_ID + 8] = m_torrentInfo.GetInfoHash()[i];
-
-    for (size_t i = 0; i < m_clientPeerID.size(); i++)
-        request[i + 1 + utils::PROTOCOL_ID + 8 + utils::TORRENT_HASH_LENGTH] = m_clientPeerID[i];
+    build_request(request, 1 + utils::PROTOCOL_ID + 8 + utils::TORRENT_HASH_LENGTH,
+                  begin(m_clientPeerID), end(m_clientPeerID));
 
     size_t sendBytes = boost::asio::async_write(socket, boost::asio::buffer(request), yield[ec]);
-    if (ec)
-        return;
+    if (ec) return;
 
     std::string response(utils::HANDSHAKE_LENGTH, '\0');
+
     size_t responseBytes = boost::asio::async_read(socket, boost::asio::buffer(response), yield[ec]);
-    if (ec)
-        return;
+    if (ec) return;
     if (sendBytes != responseBytes)
     {
         ec.assign(boost::system::errc::bad_message, boost::system::system_category());
@@ -52,9 +48,9 @@ void ConnectionManager::Init(boost::asio::ip::tcp::socket &socket,
 
     int8_t responseProtocolID = static_cast<int8_t>(response[0]);
 
-    std::string responsePrtcl(responseProtocolID, ' ');
+    std::string responseProtocol(responseProtocolID, ' ');
     for (int i = 0; i < responseProtocolID; i++)
-        responsePrtcl[i] = response[i + 1];
+        responseProtocol[i] = response[i + 1];
 
     std::vector<unsigned char> responseHash(utils::TORRENT_HASH_LENGTH);
     for (int i = 0; i < utils::TORRENT_HASH_LENGTH; i++)
@@ -64,7 +60,7 @@ void ConnectionManager::Init(boost::asio::ip::tcp::socket &socket,
     for (size_t i = 0; i < responsePeerID.size(); i++)
         responsePeerID[i] = response[i + 1 + utils::PROTOCOL_ID + 8 + utils::TORRENT_HASH_LENGTH];
 
-    if (requstPrtcl != responsePrtcl || m_torrentInfo.GetInfoHash() != responseHash)
+    if (requstProtocol != responseProtocol || m_torrentInfo.GetInfoHash() != responseHash)
     {
         ec.assign(boost::system::errc::bad_message, boost::system::system_category());
         return;
@@ -81,19 +77,5 @@ void ConnectionManager::Listen(boost::asio::ip::tcp::socket &socket,
     m_acceptor.listen();
 
     m_acceptor.async_accept(socket, yield[ec]);
-
-    if (ec)
-        return;
-
-    boost::asio::ip::tcp::endpoint remote_ep = socket.remote_endpoint(ec);
-    if (!ec)
-    {
-        std::cout << "Подключился клиент: "
-                  << remote_ep.address().to_string() << ":"
-                  << remote_ep.port() << std::endl;
-    }
-    else
-    {
-        std::cerr << "Ошибка при получении remote_endpoint: " << ec.message() << std::endl;
-    }
+    if (ec) return;
 }

@@ -10,8 +10,9 @@
 #include <boost/beast.hpp>
 
 #include "Abstraction/Tracker.hpp"
-
 #include "AnnounceResponseUDP.hpp"
+
+#include "../utils/Functors/build_request.hpp"
 
 class TrackerUDP : public Tracker
 {
@@ -25,6 +26,8 @@ public:
                             boost::system::error_code &ec);
 
 private:
+    utils::build_request build_request;
+
     boost::asio::ip::udp::socket m_socket;
     boost::asio::ip::udp::endpoint m_endpoint;
 
@@ -36,39 +39,17 @@ private:
         {"started", 2},
         {"stopped", 3}};
 
-    template <typename T>
-    void buildRequest(std::vector<unsigned char> &request, size_t offset, T value)
+    template <typename integer, typename = std::enable_if_t<std::is_integral_v<integer>>>
+    void setRandomIntValue(integer &number)
     {
-        if constexpr (std::is_integral_v<T>)
-        {
-            if (offset + sizeof(T) > request.size())
-                throw std::out_of_range("Bad offset");
-
-            for (size_t i = 0; i < sizeof(T); i++)
-                request[offset + i] = (value >> (8 * (sizeof(T) - 1 - i))) & 0xFF;
-        }
-        else if constexpr (std::is_same_v<T, std::string>)
-        {
-            if (offset + value.size() > request.size())
-                throw std::out_of_range("Bad offset");
-
-            for (size_t i = 0; i < value.size(); i++)
-                request[offset + i] = static_cast<unsigned char>(value[i]);
-        }
-        else
-            throw std::invalid_argument("Wrong argument");
-    }
-    template <typename T>
-    void setRandomIntValue(T &number)
-    {
-        static_assert(std::is_integral<T>::value, "T must be an integer type");
+        static_assert(std::is_integral<integer>::value, "integer must be an integer type");
 
         std::random_device rd;
         std::mt19937 gen(rd());
         std::uniform_int_distribution<> dis(0, 255);
 
         number = 0;
-        for (int i = 0; i < sizeof(T); i++)
+        for (int i = 0; i < sizeof(integer); i++)
             number |= (dis(gen) << (8 * i));
     }
 };

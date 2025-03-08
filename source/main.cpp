@@ -11,23 +11,24 @@
 #include "../include/AnnounceResponseUDP.hpp"
 #include "../include/ConnectionManager.hpp"
 
-#include "../utils/Functors/GeneratorPeerID.hpp"
+#include "../utils/Functors/generate_peer_id.hpp"
 
 int main(int argc, char *argv[])
 {
+
     TorrentMetaData tmd("../_input/28777.torrent");
 
-    utils::GeneratorPeerID gpid;
+    utils::generate_peer_id gpid;
     std::string peerID = gpid();
 
     boost::asio::io_context io;
-    auto tracker = std::make_shared<TrackerHTTP>(io, tmd.GetTrackerURLs()[0]);
+    auto tracker = std::make_shared<TrackerUDP>(io, tmd.GetTrackerURLs()[0]);
     std::cout << tmd.GetTrackerURLs()[0] << std::endl;
 
     auto connectionManager = std::make_shared<ConnectionManager>(io, tmd, peerID);
 
-    for(auto i :  tmd.GetTrackerURLs())
-        std::cout << i << std::endl;
+    //for(auto i :  tmd.GetTrackerURLs())
+      //  std::cout << i << std::endl;
 
     boost::asio::spawn(io, [&io, tracker, connectionManager, &peerID, &tmd](boost::asio::yield_context yield)
                        {
@@ -68,7 +69,6 @@ int main(int argc, char *argv[])
         for (const auto& peer : response.GetPeers())
             std::cout << peer.GetID() << " " << peer.ToString() << std::endl;
         
-        /*
         auto peers = response.GetPeers();
         for (size_t i = 0; i < peers.size(); i++) {
             boost::asio::spawn(io, [&, peer = peers[i]](boost::asio::yield_context yield) {
@@ -84,13 +84,14 @@ int main(int argc, char *argv[])
                 }
             });
         }
-        */
-        auto socket = std::make_shared<boost::asio::ip::tcp::socket>(io);
-        connectionManager->Listen(*socket, yield, ec, 6881);
+        
+        //auto socket = std::make_shared<boost::asio::ip::tcp::socket>(io);
+        //connectionManager->Listen(*socket, yield, ec, 6881);
 
         
         });
-
+    std::cout << "i was here before all network calls" << std::endl;
+    std::cout << "i was here before all network calls" << std::endl;
     io.run();
     return 0;
 }
