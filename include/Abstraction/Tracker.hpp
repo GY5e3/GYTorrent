@@ -7,6 +7,8 @@
 
 #include <boost/asio.hpp>
 
+#include "AnnounceResponse.hpp"
+
 class Tracker : public std::enable_shared_from_this<Tracker>
 {
 public:
@@ -14,6 +16,12 @@ public:
     {
         getHostAndPortFromURL(trackerURL);
     }
+
+    virtual void Connect(boost::asio::yield_context yield, boost::system::error_code &ec) = 0;
+
+    virtual AnnounceResponse Get(boost::asio::yield_context yield,
+                                 std::unordered_map<std::string, std::string> &data,
+                                 boost::system::error_code &ec) = 0;
 
 protected:
     std::string m_host;

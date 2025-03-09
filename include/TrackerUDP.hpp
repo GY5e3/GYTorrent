@@ -10,20 +10,21 @@
 #include <boost/beast.hpp>
 
 #include "Abstraction/Tracker.hpp"
+#include "Abstraction/AnnounceResponse.hpp"
 #include "AnnounceResponseUDP.hpp"
 
-#include "../utils/Functors/build_request.hpp"
+#include "Functors/build_request.hpp"
 
 class TrackerUDP : public Tracker
 {
 public:
     TrackerUDP(boost::asio::io_context &io, const std::string &trackerURL);
 
-    void Connect(boost::asio::yield_context yield, boost::system::error_code &ec);
+    void Connect(boost::asio::yield_context yield, boost::system::error_code &ec) override;
 
-    AnnounceResponseUDP Get(boost::asio::yield_context yield,
-                            std::unordered_map<std::string, std::string> &data,
-                            boost::system::error_code &ec);
+    AnnounceResponse Get(boost::asio::yield_context yield,
+                         std::unordered_map<std::string, std::string> &data,
+                         boost::system::error_code &ec) override;
 
 private:
     utils::build_request build_request;

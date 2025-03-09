@@ -7,10 +7,9 @@
 
 #include "TorrentMetaData.hpp"
 
-#include "../utils/Entities/Peer.hpp"
-#include "../utils/BitTorrentConstants.hpp"
-
-#include "../utils/Functors/build_request.hpp"
+#include "Entities/Peer.hpp"
+#include "Functors/build_request.hpp"
+#include "BitTorrentConstants.hpp"
 
 class ConnectionManager
 {

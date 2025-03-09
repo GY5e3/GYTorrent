@@ -11,12 +11,13 @@ void TrackerHTTP::Connect(boost::asio::yield_context yield, boost::system::error
     const auto endpoints = resolver.async_resolve(m_host, m_port, yield[ec]);
 
     boost::asio::async_connect(m_stream.socket(), endpoints, yield[ec]);
-    if (ec) return;
+    if (ec)
+        return;
 }
 
-AnnounceResponseHTTP TrackerHTTP::Get(boost::asio::yield_context yield,
-                                      std::unordered_map<std::string, std::string> &data,
-                                      boost::system::error_code &ec)
+AnnounceResponse TrackerHTTP::Get(boost::asio::yield_context yield,
+                                  std::unordered_map<std::string, std::string> &data,
+                                  boost::system::error_code &ec)
 {
     std::string requestBody = "/announce?info_hash=" + encodeURL(data["info_hash"]) +
                               "&peer_id=" + encodeURL(data["peer_id"]) +
@@ -30,12 +31,14 @@ AnnounceResponseHTTP TrackerHTTP::Get(boost::asio::yield_context yield,
     request.set(boost::beast::http::field::host, m_host);
     request.set(boost::beast::http::field::user_agent, BOOST_BEAST_VERSION_STRING);
     boost::beast::http::async_write(m_stream, request, yield[ec]);
-    if (ec) return {};
+    if (ec)
+        return {};
 
     boost::beast::flat_buffer buffer;
     boost::beast::http::response<boost::beast::http::string_body> res;
     boost::beast::http::async_read(m_stream, buffer, res, yield[ec]);
-    if (ec) return {};
+    if (ec)
+        return {};
 
     return AnnounceResponseHTTP{res.body()};
 }

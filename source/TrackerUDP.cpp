@@ -48,7 +48,7 @@ void TrackerUDP::Connect(boost::asio::yield_context yield, boost::system::error_
     }
 }
 
-AnnounceResponseUDP TrackerUDP::Get(boost::asio::yield_context yield,
+AnnounceResponse TrackerUDP::Get(boost::asio::yield_context yield,
                      std::unordered_map<std::string, std::string> &data,
                      boost::system::error_code &ec)
 

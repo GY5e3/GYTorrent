@@ -8,9 +8,9 @@
 
 #include <openssl/sha.h>
 
-#include "../utils/Functors/bencode.hpp"
-#include "../utils/Entities/File.hpp"
-#include "../utils/Entities/Piece.hpp"
+#include "Functors/bencode.hpp"
+#include "Entities/File.hpp"
+#include "Entities/Piece.hpp"
 
 class TorrentMetaData
 {

@@ -2,7 +2,7 @@
 
 #include "Abstraction/AnnounceResponse.hpp"
 
-#include "../utils/Functors/bencode.hpp"
+#include "Functors/bencode.hpp"
 
 class AnnounceResponseHTTP : public AnnounceResponse
 {
