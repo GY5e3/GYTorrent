@@ -77,5 +77,6 @@ void ConnectionManager::Listen(boost::asio::ip::tcp::socket &socket,
     m_acceptor.listen();
 
     m_acceptor.async_accept(socket, yield[ec]);
+    
     if (ec) return;
 }

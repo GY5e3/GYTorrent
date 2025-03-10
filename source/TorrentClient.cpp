@@ -17,18 +17,37 @@ void TorrentClient::Execute()
     // if is_open(downloadPath/resume.json) then recover bitfield and peer list probably
 
     auto trackerURLs = tmd.GetTrackerURLs();
-
     for (auto trackerURL : trackerURLs)
     {
-        std::shared_ptr<Tracker> tracker;
-        if(trackerURL.substr(0,3) == "udp")
-            tracker = std::make_shared<TrackerUDP>(io, trackerURL);
-        else
-            tracker = std::make_shared<TrackerHTTP>(io, trackerURL);
+        boost::system::error_code ecTracker;
 
-        boost::asio::spawn(io, [&io, tracker, &tmd](boost::asio::yield_context yield) {
-            
-        });
+        std::shared_ptr<Tracker> tracker;
+        if (trackerURL.substr(0, 3) == "udp")
+            tracker = std::make_shared<TrackerUDP>(io);
+        else
+            tracker = std::make_shared<TrackerHTTP>(io);
+
+        boost::asio::spawn(io, [&io, tracker, &trackerURL, &ecTracker, &tmd](boost::asio::yield_context yield)
+                           {
+                               try
+                               {
+                                   tracker->Connect(yield, trackerURL, ecTracker);
+                                   if (ecTracker)
+                                   {
+                                       // Logger obj -> write() instead of displaying it in the console
+                                       std::cout << trackerURL << ": " << ecTracker.message() << std::endl;
+                                       return;
+                                   }
+                                   std::unordered_map<std::string, std::string> request;
+                                   tracker->Get(yield, request, ecTracker);
+                               }
+                               catch (const std::exception &e)
+                               {
+                                   // Logger obj -> write() instead of displaying it in the console
+                                   std::cout << trackerURL << ": " << e.what() << std::endl;
+                                   return;
+                               }
+                           });
     }
 }
 

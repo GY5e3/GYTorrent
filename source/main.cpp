@@ -1,5 +1,6 @@
 #include <iostream>
 #include <utility>
+#include <filesystem>
 
 #include <boost/asio.hpp>
 #include <boost/asio/spawn.hpp>
@@ -13,15 +14,58 @@
 
 #include "../utils/BitTorrentConstants.hpp"
 
+void Recieve(boost::asio::ip::tcp::socket &socket, boost::asio::yield_context yield, boost::system::error_code ec,
+             std::function<void(boost::asio::ip::tcp::socket &, std::vector<unsigned char>)> callback)
+{
+    std::vector<unsigned char> messageLengthBuffer(4);
+    size_t recievedBytes = boost::asio::async_read(socket, boost::asio::buffer(messageLengthBuffer), yield[ec]);
+    int32_t messageLength = recievedBytes ? (static_cast<int32_t>(messageLengthBuffer[0]) << 24) |
+                                                (static_cast<int32_t>(messageLengthBuffer[1]) << 16) |
+                                                (static_cast<int32_t>(messageLengthBuffer[2]) << 8) |
+                                                static_cast<int32_t>(messageLengthBuffer[3])
+                                          : 0;
+
+    std::vector<unsigned char> messageBuffer(messageLength);
+    boost::asio::async_read(socket, boost::asio::buffer(messageBuffer), yield[ec]);
+
+    callback(socket, messageBuffer);
+}
+void CallBack(boost::asio::ip::tcp::socket &socket, std::vector<unsigned char> messageBuffer)
+{
+    std::string peer = socket.remote_endpoint().address().to_string() + ":" + std::to_string(socket.remote_endpoint().port());
+
+    int messageID = messageBuffer.size() ? static_cast<int>(messageBuffer[0]) : static_cast<int>(utils::MessageID::keepAlive);
+    std::ostringstream os;
+    if (messageID == static_cast<int>(utils::MessageID::bitField))
+    {
+        os << "BitField by " + peer << ":";
+        std::vector<bool> bifi;
+        for (size_t i = 1; i < messageBuffer.size(); i++)
+        {
+            unsigned char byte = messageBuffer[i];
+            for (int j = 7; j >= 0; --j)
+            {
+                bifi.push_back(byte & (1 << j));
+            }
+        }
+        for (auto mes : bifi)
+        {
+            os << " " << mes;
+        }
+        os << std::dec << "\n";
+        std::cout << os.str();
+    }
+}
 int main(int argc, char *argv[])
 {
-
     TorrentMetaData tmd("../_input/28777.torrent");
+
+    std::filesystem::create_directory(tmd.GetName());
 
     std::string peerID = "-GYTORR-123456789101";
 
     boost::asio::io_context io;
-    auto tracker = std::make_shared<TrackerHTTP>(io, tmd.GetTrackerURLs()[0]);
+    auto tracker = std::make_shared<TrackerHTTP>(io);
     std::cout << tmd.GetTrackerURLs()[0] << std::endl;
 
     auto connectionManager = std::make_shared<ConnectionManager>(io, tmd, peerID);
@@ -33,7 +77,7 @@ int main(int argc, char *argv[])
                        {
                            boost::system::error_code ec;
 
-                           tracker->Connect(yield, ec);
+                           tracker->Connect(yield, tmd.GetTrackerURLs()[0], ec);
                            if (ec)
                            {
                                std::cout << ec.message() << std::endl;
@@ -87,38 +131,8 @@ int main(int argc, char *argv[])
                 else {
                     std::cout << "Connection w/ " + peer.ToString() + " is success!" << std::endl;
                     
-                    std::vector<unsigned char> messageLengthBuffer(4);
-                    size_t recievedBytes = boost::asio::async_read(*socket, boost::asio::buffer(messageLengthBuffer), yield[ec]);
-                    int32_t messageLength = recievedBytes ? (static_cast<int32_t>(messageLengthBuffer[0]) << 24) |
-                                                    (static_cast<int32_t>(messageLengthBuffer[1]) << 16) |
-                                                    (static_cast<int32_t>(messageLengthBuffer[2]) << 8) |
-                                                    static_cast<int32_t>(messageLengthBuffer[3])
-                                                    : 0;
-
-                    std::vector<unsigned char> messageBuffer(messageLength);
-                    boost::asio::async_read(*socket, boost::asio::buffer(messageBuffer), yield[ec]);
-
-                    int messageID = messageBuffer.size() ? static_cast<int>(messageBuffer[0]) : static_cast<int>(utils::MessageID::keepAlive);
-                    std::ostringstream os;
-                    if(messageID == static_cast<int>(utils::MessageID::bitField))
-                    {
-                        os << "BitField by " + peer.ToString() << ":";
-                        std::vector<bool> bifi;
-                        for (size_t i = 1; i < messageBuffer.size(); i++)
-                        {
-                            unsigned char byte = messageBuffer[i];
-                            for (int j = 7; j >= 0; --j)
-                            {
-                                bifi.push_back(byte & (1 << j));
-                            }
-                        }
-                        for (auto mes : bifi)
-                        {
-                            os << " " << mes;
-                        }
-                        os << std::dec << "\n";
-                        std::cout << os.str();
-                    }
+                    Recieve(*socket, yield, ec, CallBack);
+                    
                 } });
                            }
 

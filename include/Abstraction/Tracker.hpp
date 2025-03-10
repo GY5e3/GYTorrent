@@ -12,44 +12,42 @@
 class Tracker : public std::enable_shared_from_this<Tracker>
 {
 public:
-    Tracker(boost::asio::io_context &io, const std::string &trackerURL) : m_io(io)
-    {
-        getHostAndPortFromURL(trackerURL);
-    }
+    Tracker(boost::asio::io_context &io) : m_io(io) {}
 
-    virtual void Connect(boost::asio::yield_context yield, boost::system::error_code &ec) = 0;
+    virtual void Connect(boost::asio::yield_context yield, const std::string &trackerURL, boost::system::error_code &ec) = 0;
 
     virtual AnnounceResponse Get(boost::asio::yield_context yield,
                                  std::unordered_map<std::string, std::string> &data,
                                  boost::system::error_code &ec) = 0;
 
 protected:
-    std::string m_host;
-    std::string m_port;
-
     boost::asio::io_context &m_io;
 
-    void getHostAndPortFromURL(const std::string &url)
+    std::string checkRequiredParams(const std::unordered_map<std::string, std::string> &data) const
     {
-        // Регулярное выражение для парсинга URL
+        std::vector<std::string> requiredParams{
+            "info_hash", "peer_id", "port", "uploaded", "downloaded", "left", "event"};
+        for (std::string param : requiredParams)
+        {
+            if (data.find(param) == end(data))
+                return param;
+        }
+        return "";
+    }
+
+    std::pair<std::string, std::string> getHostAndPortFromURL(const std::string &url) const
+    {
+        std::string host, port;
+        
         std::regex url_regex(R"(^(\w+):\/\/([^\/:]+):?(\d+)?\/?.*$)");
+
         std::smatch url_match_result;
 
-        // Проверяем, соответствует ли URL регулярному выражению
         if (std::regex_match(url, url_match_result, url_regex))
         {
-            // Получаем хост (второй подшаблон)
-            m_host = url_match_result[2].str();
-
-            // Получаем порт (третий подшаблон), если он есть
-            if (url_match_result[3].matched)
-            {
-                m_port = url_match_result[3].str();
-            }
-            else
-            {
-                m_port = "80"; // DEFAULT_PORT;
-            }
+            host = url_match_result[2].str();
+            port = url_match_result[3].matched ? url_match_result[3].str() : "80";
         }
+        return {host, port};
     }
 };

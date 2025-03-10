@@ -1,12 +1,13 @@
 #include "TrackerUDP.hpp"
 
-TrackerUDP::TrackerUDP(boost::asio::io_context &io, const std::string &trackerURL) : Tracker(io, trackerURL),
-                                                                                     m_socket(io, boost::asio::ip::udp::v4()) {}
+TrackerUDP::TrackerUDP(boost::asio::io_context &io) : Tracker(io), m_socket(io, boost::asio::ip::udp::v4()) {}
 
-void TrackerUDP::Connect(boost::asio::yield_context yield, boost::system::error_code &ec)
+void TrackerUDP::Connect(boost::asio::yield_context yield, const std::string &trackerURL, boost::system::error_code &ec)
 {
+    auto [host, port] = getHostAndPortFromURL(trackerURL);
+
     boost::asio::ip::udp::resolver resolver(m_io);
-    auto endpoints = resolver.async_resolve(m_host, m_port, yield[ec]);
+    auto endpoints = resolver.async_resolve(host, port, yield[ec]);
     if (ec) return;
 
     m_endpoint = *endpoints.begin();
@@ -19,8 +20,7 @@ void TrackerUDP::Connect(boost::asio::yield_context yield, boost::system::error_
     uint32_t incomingAction = 0x0000;
     build_request(request, 8, incomingAction);
 
-    int32_t incomingTransactionID = 0;
-    setRandomIntValue(incomingTransactionID);
+    int32_t incomingTransactionID = getRandInt<int32_t>();
     build_request(request, 12, incomingTransactionID);
 
     m_socket.async_send_to(boost::asio::buffer(request), m_endpoint, yield[ec]);
@@ -42,15 +42,16 @@ void TrackerUDP::Connect(boost::asio::yield_context yield, boost::system::error_
     for (int i = 0; i < 8; i++)
         m_connectionID |= static_cast<uint64_t>(response[i + 8]) << (8 * (7 - i));
 
-    if(incomingAction != outgoingAction || incomingTransactionID != outgoingTransactionID) {
+    if (incomingAction != outgoingAction || incomingTransactionID != outgoingTransactionID)
+    {
         ec.assign(boost::system::errc::bad_message, boost::system::system_category());
         return;
     }
 }
 
 AnnounceResponse TrackerUDP::Get(boost::asio::yield_context yield,
-                     std::unordered_map<std::string, std::string> &data,
-                     boost::system::error_code &ec)
+                                 std::unordered_map<std::string, std::string> &data,
+                                 boost::system::error_code &ec)
 
 {
     std::vector<unsigned char> request(98);
@@ -60,8 +61,7 @@ AnnounceResponse TrackerUDP::Get(boost::asio::yield_context yield,
     uint32_t incomingAction = 1;
     build_request(request, 8, incomingAction);
 
-    int32_t incomingTransactionID = 0;
-    setRandomIntValue(incomingTransactionID);
+    int32_t incomingTransactionID = getRandInt<int32_t>();
     build_request(request, 12, incomingTransactionID);
 
     auto infoHash = data["info_hash"];
@@ -77,15 +77,11 @@ AnnounceResponse TrackerUDP::Get(boost::asio::yield_context yield,
     build_request(request, 72, std::stoull(data["uploaded"]));
 
     build_request(request, 80, eventMapping[data["event"]]);
-    
+
     int32_t ip_address = data.find("IP address") != end(data) ? std::stoi(data["IP address"]) : 0;
     build_request(request, 84, ip_address);
 
-    int32_t key = 0;
-    if (data.find("key") != end(data))
-        key = std::stoi(data["key"]);
-    else        
-        setRandomIntValue(key);
+    int32_t key = data.find("key") != end(data) ? std::stoi(data["key"]) : getRandInt<int32_t>();
     build_request(request, 88, key);
 
     int32_t num_want = data.find("num_want") != end(data) ? std::stoi(data["num_want"]) : -1;
@@ -94,12 +90,15 @@ AnnounceResponse TrackerUDP::Get(boost::asio::yield_context yield,
     build_request(request, 96, static_cast<int16_t>(std::stoi(data["port"])));
 
     m_socket.async_send_to(boost::asio::buffer(request), m_endpoint, yield[ec]);
-    if (ec) return {};
-    
+    if (ec)
+        return {};
+
     std::vector<unsigned char> response(20 + 50 * 6, '\0');
     size_t responseSize = m_socket.async_receive_from(boost::asio::buffer(response), m_endpoint, yield[ec]);
-    if (ec) return {};
-    else if(responseSize < 20) {
+    if (ec)
+        return {};
+    else if (responseSize < 20)
+    {
         ec.assign(boost::system::errc::bad_message, boost::system::system_category());
         return {};
     }
@@ -114,11 +113,12 @@ AnnounceResponse TrackerUDP::Get(boost::asio::yield_context yield,
     for (int i = 0; i < 4; i++)
         outgoingTransactionID |= static_cast<uint32_t>(response[i + 4]) << (8 * (3 - i));
 
-    if(incomingAction != outgoingAction || incomingTransactionID != outgoingTransactionID) {
+    if (incomingAction != outgoingAction || incomingTransactionID != outgoingTransactionID)
+    {
         ec.assign(boost::system::errc::bad_message, boost::system::system_category());
         return {};
     }
-    
+
     std::vector<unsigned char> responseBody(response.begin() + 8, response.end());
     return AnnounceResponseUDP{responseBody};
 }

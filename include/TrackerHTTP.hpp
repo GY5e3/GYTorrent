@@ -15,9 +15,9 @@
 class TrackerHTTP : public Tracker
 {
 public:
-    TrackerHTTP(boost::asio::io_context &io, const std::string &trackerURL);
+    TrackerHTTP(boost::asio::io_context &io);
 
-    void Connect(boost::asio::yield_context yield, boost::system::error_code &ec) override;
+    void Connect(boost::asio::yield_context yield, const std::string &trackerURL, boost::system::error_code &ec) override;
 
     AnnounceResponse Get(boost::asio::yield_context yield,
                          std::unordered_map<std::string, std::string> &data,
