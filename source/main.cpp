@@ -5,6 +5,8 @@
 #include <boost/asio.hpp>
 #include <boost/asio/spawn.hpp>
 
+#include "../include/TrackerAnnouncer.hpp"
+
 #include "../include/TorrentMetaData.hpp"
 #include "../include/TrackerHTTP.hpp"
 #include "../include/TrackerUDP.hpp"
@@ -56,85 +58,76 @@ void CallBack(boost::asio::ip::tcp::socket &socket, std::vector<unsigned char> m
         std::cout << os.str();
     }
 }
+void call_back(const std::vector<utils::Peer> &peers, boost::system::error_code ec)
+{
+    if (ec)
+    {
+        std::cout << ec.message() + " do smth w/ this info lol" << std::endl;
+        return;
+    }
+    std::cout << "peers:" << std::endl;
+    for (const auto &peer : peers)
+        std::cout << peer.GetID() << " " << peer.ToString() << std::endl;
+}
 int main(int argc, char *argv[])
 {
+    boost::asio::io_context io;
+
     TorrentMetaData tmd("../_input/28777.torrent");
+    auto buffer = tmd.GetInfoHash();
+    std::string infoHash(begin(buffer), end(buffer));
+    std::string peerID = "-GYTORR-123456789101";
 
     std::filesystem::create_directory(tmd.GetName());
 
-    std::string peerID = "-GYTORR-123456789101";
-
-    boost::asio::io_context io;
-    auto tracker = std::make_shared<TrackerHTTP>(io);
-    std::cout << tmd.GetTrackerURLs()[0] << std::endl;
-
     auto connectionManager = std::make_shared<ConnectionManager>(io, tmd, peerID);
+    auto announcer = std::make_shared<TrackerAnnouncer>(io, infoHash, peerID, 6881, call_back);
+    auto timer = std::make_shared<boost::asio::steady_timer>(io);
 
-    // for(auto i :  tmd.GetTrackerURLs())
-    //   std::cout << i << std::endl;
+    std::string trackerURL = tmd.GetTrackerURLs()[0];
+    std::shared_ptr<Tracker> exampleTracker;
+    if (trackerURL.substr(0, 3) == "udp")
+        exampleTracker = std::make_shared<TrackerUDP>(io, trackerURL);
+    else
+        exampleTracker = std::make_shared<TrackerHTTP>(io, trackerURL);
 
-    boost::asio::spawn(io, [&io, tracker, connectionManager, &peerID, &tmd](boost::asio::yield_context yield)
+    std::cout << trackerURL << std::endl;
+
+    boost::asio::spawn(io,
+                       [&io, exampleTracker, connectionManager, announcer, timer, &peerID, &tmd](boost::asio::yield_context yield)
                        {
                            boost::system::error_code ec;
 
-                           tracker->Connect(yield, tmd.GetTrackerURLs()[0], ec);
+                           announcer->Start(exampleTracker, ec);
                            if (ec)
                            {
-                               std::cout << ec.message() << std::endl;
-                               return;
+                               ec.message();
                            }
-                           auto buffer = tmd.GetInfoHash();
-                           std::string infoHash(begin(buffer), end(buffer));
-
-                           std::string port = "6881";
-                           std::string uploaded = "0";
-                           std::string downloaded = "0";
-                           std::string left = "0";
-                           std::string compact = "0";
-                           std::string event = "completed";
-                           std::unordered_map<std::string, std::string> data = {
-                               {"info_hash", infoHash},
-                               {"peer_id", peerID},
-                               {"port", port},
-                               {"uploaded", uploaded},
-                               {"downloaded", downloaded},
-                               {"left", left},
-                               {"compact", compact},
-                               {"event", event},
-                           };
-
-                           auto response = tracker->Get(yield, data, ec);
-
-                           std::cout << std::endl;
-                           std::cout << "complete: " << response.GetSeeders() << std::endl
-                                     << std::endl;
-                           std::cout << "incomlete: " << response.GetLeechers() << std::endl
-                                     << std::endl;
-                           std::cout << "interval: " << response.GetInterval() << std::endl
-                                     << std::endl;
-                           std::cout << "peers:" << std::endl;
-                           for (const auto &peer : response.GetPeers())
-                               std::cout << peer.GetID() << " " << peer.ToString() << std::endl;
+                           timer->expires_after(std::chrono::seconds(15));
+                           timer->async_wait(yield);
+                           announcer->SetEvent("stopped");
+                           announcer->StopAll();
+                           /*
 
                            auto peers = response.GetPeers();
-                           for (size_t i = 0; i < peers.size(); i++)
-                           {
-                               boost::asio::spawn(io, [&, peer = peers[i]](boost::asio::yield_context yield)
-                                                  {
-                boost::system::error_code ec;
-                auto socket = std::make_shared<boost::asio::ip::tcp::socket>(io);
+                                                      for (size_t i = 0; i < peers.size(); i++)
+                                                      {
+                                                          boost::asio::spawn(io, [&, peer = peers[i]](boost::asio::yield_context yield)
+                                                                             {
+                                           boost::system::error_code ec;
+                                           auto socket = std::make_shared<boost::asio::ip::tcp::socket>(io);
 
-                connectionManager->Init(*socket, peer, yield, ec);
-                if (ec) {
-                    std::cout << ec.message() + ": " + peer.ToString() << std::endl;
-                }
-                else {
-                    std::cout << "Connection w/ " + peer.ToString() + " is success!" << std::endl;
-                    
-                    Recieve(*socket, yield, ec, CallBack);
-                    
-                } });
-                           }
+                                           connectionManager->Init(*socket, peer, yield, ec);
+                                           if (ec) {
+                                               std::cout << ec.message() + ": " + peer.ToString() << std::endl;
+                                           }
+                                           else {
+                                               std::cout << "Connection w/ " + peer.ToString() + " is success!" << std::endl;
+
+                                               Recieve(*socket, yield, ec, CallBack);
+
+                                           }});}
+                           */
 
                            // auto socket = std::make_shared<boost::asio::ip::tcp::socket>(io);
                            // connectionManager->Listen(*socket, yield, ec, 6881);

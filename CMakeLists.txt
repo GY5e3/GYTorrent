@@ -20,6 +20,7 @@ add_executable(${PROJECT_NAME}
     source/AnnounceResponseUDP.cpp
     source/ConnectionManager.cpp
     source/PieceManager.cpp
-    source/TorrentClient.cpp)
+    source/TorrentClient.cpp
+    source/TrackerAnnouncer.cpp)
 
 target_link_libraries(${PROJECT_NAME} PRIVATE Boost::boost boost_coroutine OpenSSL::SSL OpenSSL::Crypto)

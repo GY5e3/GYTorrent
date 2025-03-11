@@ -15,12 +15,12 @@
 
 #include "Functors/build_request.hpp"
 
+#include "BitTorrentConstants.hpp"
+
 class TrackerUDP : public Tracker
 {
 public:
-    TrackerUDP(boost::asio::io_context &io);
-
-    void Connect(boost::asio::yield_context yield, const std::string &trackerURL, boost::system::error_code &ec) override;
+    TrackerUDP(boost::asio::io_context &io, const std::string &trackerURL);
 
     AnnounceResponse Get(boost::asio::yield_context yield,
                          std::unordered_map<std::string, std::string> &data,
@@ -35,10 +35,10 @@ private:
     uint64_t m_connectionID;
 
     std::unordered_map<std::string, int32_t> eventMapping{
-        {"none", 0},
-        {"completed", 1},
-        {"started", 2},
-        {"stopped", 3}};
+        {"none", static_cast<int32_t>(utils::TrackerEvent::none)},
+        {"completed", static_cast<int32_t>(utils::TrackerEvent::completed)},
+        {"started", static_cast<int32_t>(utils::TrackerEvent::started)},
+        {"stopped", static_cast<int32_t>(utils::TrackerEvent::stopped)}};
 
     template <typename integer, typename = std::enable_if_t<std::is_integral_v<integer>>>
     integer getRandInt()

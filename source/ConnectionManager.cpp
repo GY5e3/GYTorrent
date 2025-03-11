@@ -18,7 +18,7 @@ void ConnectionManager::Init(boost::asio::ip::tcp::socket &socket,
     auto endpoints = resolver.async_resolve(peer.GetIP(), peer.GetPort(), yield[ec]);
 
     boost::asio::async_connect(socket, endpoints, yield[ec]);
-    if (ec) return;
+    if(ec) return;
 
     std::vector<unsigned char> request(utils::HANDSHAKE_LENGTH, '\0');
 
@@ -77,6 +77,7 @@ void ConnectionManager::Listen(boost::asio::ip::tcp::socket &socket,
     m_acceptor.listen();
 
     m_acceptor.async_accept(socket, yield[ec]);
-    
-    if (ec) return;
+
+    if (ec)
+        return;
 }

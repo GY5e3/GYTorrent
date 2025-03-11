@@ -28,4 +28,12 @@ namespace utils
         cancel = 8,
         port = 9
     };
+
+    enum class TrackerEvent
+    {
+        none = 0,
+        completed = 1,
+        started = 2,
+        stopped = 3
+    };
 }

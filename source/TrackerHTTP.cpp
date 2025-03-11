@@ -1,24 +1,24 @@
 #include "TrackerHTTP.hpp"
 
-TrackerHTTP::TrackerHTTP(boost::asio::io_context &io) : Tracker(io), m_stream(io) {}
-
-void TrackerHTTP::Connect(boost::asio::yield_context yield, const std::string &trackerURL, boost::system::error_code &ec)
-{
-    auto [host, port] = getHostAndPortFromURL(trackerURL);
-
-    boost::asio::ip::tcp::resolver resolver(m_io);
-    const auto endpoints = resolver.async_resolve(host, port, yield[ec]);
-
-    boost::asio::async_connect(m_stream.socket(), endpoints, yield[ec]);
-}
+TrackerHTTP::TrackerHTTP(boost::asio::io_context &io, const std::string &trackerURL) : Tracker(io, trackerURL), m_stream(io) {}
 
 AnnounceResponse TrackerHTTP::Get(boost::asio::yield_context yield,
                                   std::unordered_map<std::string, std::string> &data,
                                   boost::system::error_code &ec)
 {
+    auto [host, port] = getHostAndPortFromURL(m_url);
+    boost::asio::ip::tcp::resolver resolver(m_io);
+
+    const auto endpoints = resolver.async_resolve(host, port, yield[ec]);
+    if (ec) return {};
+
+    boost::asio::async_connect(m_stream.socket(), endpoints, yield[ec]);
+    if (ec) return {};
+
     if (std::string param = checkRequiredParams(data); !param.empty())
     {
-        throw std::invalid_argument("Missing required query param: " + param);
+        ec.assign(boost::system::errc::bad_message, boost::system::system_category());
+        return {};
     }
 
     std::string requestBody = "/announce?";
@@ -37,8 +37,6 @@ AnnounceResponse TrackerHTTP::Get(boost::asio::yield_context yield,
     requestBody.append((data.find("key") != end(data) ? "&key=" + data["key"] : ""));
     requestBody.append((data.find("trackerid") != end(data) ? "&trackerid=" + data["trackerid"] : ""));
 
-    std::cout << requestBody << std::endl;
-
     boost::beast::http::request<boost::beast::http::string_body> request{boost::beast::http::verb::get, requestBody, 11};
     request.set(boost::beast::http::field::host, m_stream.socket().remote_endpoint().address().to_string());
     request.set(boost::beast::http::field::user_agent, BOOST_BEAST_VERSION_STRING);
@@ -50,8 +48,6 @@ AnnounceResponse TrackerHTTP::Get(boost::asio::yield_context yield,
     boost::beast::http::async_read(m_stream, buffer, res, yield[ec]);
     if (ec) return {};
 
-    std::cout << res.base() << std::endl;
-    std::cout << res.body() << std::endl;
     return AnnounceResponseHTTP{res.body()};
 }
 

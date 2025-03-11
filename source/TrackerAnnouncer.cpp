@@ -1,0 +1,87 @@
+#include "TrackerAnnouncer.hpp"
+
+using callback_function = std::function<void(const std::vector<utils::Peer> &, boost::system::error_code)>;
+TrackerAnnouncer::TrackerAnnouncer(boost::asio::io_context &io,
+                                   const std::string &infoHash,
+                                   const std::string &peerID,
+                                   uint16_t port,
+                                   callback_function callback) : m_io(io),
+                                                                 m_infoHash(infoHash),
+                                                                 m_peerID(peerID),
+                                                                 m_port(port),
+                                                                 m_callback(callback)
+{
+}
+void TrackerAnnouncer::Start(std::shared_ptr<Tracker> tracker, boost::system::error_code &ecTracker)
+{
+    Update(tracker);
+}
+
+void TrackerAnnouncer::Update(std::shared_ptr<Tracker> tracker, uint32_t interval)
+{
+    boost::asio::spawn(m_io,
+                       [this, tracker, &interval](boost::asio::yield_context yield)
+                       {
+                           boost::system::error_code ecTracker;
+
+                           auto cooldown = std::make_shared<boost::asio::steady_timer>(m_io);
+                           m_activeTimers.insert(cooldown);
+
+                           cooldown->expires_after(std::chrono::seconds(interval));
+                           cooldown->async_wait(yield[ecTracker]);
+                           if (ecTracker)
+                           {
+                               m_activeTimers.erase(cooldown);
+                               m_callback({}, ecTracker);
+                               return;
+                           }
+
+                           std::unordered_map<std::string, std::string> data = {
+                               {"info_hash", m_infoHash},
+                               {"peer_id", m_peerID},
+                               {"port", std::to_string(m_port)},
+                               {"uploaded", std::to_string(m_uploaded)},
+                               {"downloaded", std::to_string(m_downloaded)},
+                               {"left", std::to_string(m_left)},
+                               {"compact", std::to_string(m_compact)}};
+                           data["event"] = interval == 0 ? "started" : m_event;
+
+                           auto response = tracker->Get(yield, data, ecTracker);
+                           if (ecTracker)
+                           {
+                               m_activeTimers.erase(cooldown);
+                               m_callback({}, ecTracker);
+                               return;
+                           }
+
+                           m_callback(response.GetPeers(), ecTracker);
+
+                           Update(tracker, interval);
+                       });
+}
+
+void TrackerAnnouncer::StopAll()
+{
+    for (auto &timer : m_activeTimers)
+    {
+        timer->cancel();
+    }
+}
+
+void TrackerAnnouncer::SetEvent(const std::string &event)
+{
+    m_event = event;
+}
+
+void TrackerAnnouncer::SetUploaded(uint64_t uploaded)
+{
+    m_uploaded = uploaded;
+}
+void TrackerAnnouncer::SetDownloaded(uint64_t downloaded)
+{
+    m_downloaded = downloaded;
+}
+void TrackerAnnouncer::SetLeft(uint64_t left)
+{
+    m_left = left;
+}

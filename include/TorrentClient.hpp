@@ -34,6 +34,6 @@ private:
     std::unordered_map<std::string, boost::asio::ip::tcp::socket> m_connections;
     /// @brief Generate PeerID for client
     /// @return PeerID in the format: -GYTORR-dddddddddddd, where 'd' - digit in the range from 0 to 9
-    std::string generatePeerID();
+    std::string generatePeerID() const;
 };
 
