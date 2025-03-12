@@ -11,16 +11,11 @@ include_directories(
     ${PROJECT_SOURCE_DIR}/include
     ${PROJECT_SOURCE_DIR}/utils)
 
+file(GLOB SOURCES
+    "source/*.cpp"
+    "source/**/*.cpp")
+
 add_executable(${PROJECT_NAME}
-    source/main.cpp
-    source/TorrentMetaData.cpp
-    source/TrackerHTTP.cpp
-    source/TrackerUDP.cpp
-    source/AnnounceResponseHTTP.cpp
-    source/AnnounceResponseUDP.cpp
-    source/ConnectionManager.cpp
-    source/PieceManager.cpp
-    source/TorrentClient.cpp
-    source/TrackerAnnouncer.cpp)
+    ${SOURCES})
 
 target_link_libraries(${PROJECT_NAME} PRIVATE Boost::boost boost_coroutine OpenSSL::SSL OpenSSL::Crypto)

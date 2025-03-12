@@ -1,6 +1,6 @@
 #include "TrackerAnnouncer.hpp"
 
-using callback_function = std::function<void(const std::vector<utils::Peer> &, boost::system::error_code)>;
+using callback_function = std::function<void(const std::string&, const std::vector<utils::Peer> &, boost::system::error_code)>;
 TrackerAnnouncer::TrackerAnnouncer(boost::asio::io_context &io,
                                    const std::string &infoHash,
                                    const std::string &peerID,
@@ -32,7 +32,7 @@ void TrackerAnnouncer::Update(std::shared_ptr<Tracker> tracker, uint32_t interva
                            if (ecTracker)
                            {
                                m_activeTimers.erase(cooldown);
-                               m_callback({}, ecTracker);
+                               m_callback(tracker->GetURL(), {}, ecTracker);
                                return;
                            }
 
@@ -50,13 +50,13 @@ void TrackerAnnouncer::Update(std::shared_ptr<Tracker> tracker, uint32_t interva
                            if (ecTracker)
                            {
                                m_activeTimers.erase(cooldown);
-                               m_callback({}, ecTracker);
+                               m_callback(tracker->GetURL(), {}, ecTracker);
                                return;
                            }
 
-                           m_callback(response.GetPeers(), ecTracker);
+                           m_callback(tracker->GetURL(), response.GetPeers(), ecTracker);
 
-                           Update(tracker, interval);
+                           Update(tracker, 120);
                        });
 }
 

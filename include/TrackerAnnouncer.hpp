@@ -20,7 +20,7 @@ public:
                      const std::string &infoHash,
                      const std::string &peerID,
                      uint16_t port,
-                     std::function<void(const std::vector<utils::Peer> &, boost::system::error_code)> callback);
+                     std::function<void(const std::string&, const std::vector<utils::Peer> &, boost::system::error_code)> callback);
 
     void Start(std::shared_ptr<Tracker> tracker, boost::system::error_code &ecTracker);
 
@@ -45,7 +45,7 @@ private:
     bool m_compact = false;
     std::string m_event = "started";
 
-    std::function<void(const std::vector<utils::Peer> &, boost::system::error_code)> m_callback;
+    std::function<void(const std::string& trackerURL, const std::vector<utils::Peer> &, boost::system::error_code)> m_callback;
 
     std::unordered_set<std::shared_ptr<boost::asio::steady_timer>> m_activeTimers;
 };

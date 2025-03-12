@@ -22,4 +22,5 @@ AnnounceResponseHTTP::AnnounceResponseHTTP(const std::string &responseBody)
                                       std::to_string(info["port"].GetInteger()),
                                       info["peer id"].GetString()});
     }
+    ///TODO: need to add logic for extract peers from compact response
 }

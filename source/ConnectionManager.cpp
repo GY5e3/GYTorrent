@@ -9,16 +9,17 @@ ConnectionManager::ConnectionManager(boost::asio::io_context &io,
 {
 }
 
-void ConnectionManager::Init(boost::asio::ip::tcp::socket &socket,
-                             const utils::Peer &peer,
-                             boost::asio::yield_context yield,
-                             boost::system::error_code &ec)
+PeerSession ConnectionManager::Init(const utils::Peer &peer,
+                                    boost::asio::yield_context yield,
+                                    boost::system::error_code &ec)
 {
+    boost::asio::ip::tcp::socket socket(m_io);
+
     boost::asio::ip::tcp::resolver resolver(m_io);
     auto endpoints = resolver.async_resolve(peer.GetIP(), peer.GetPort(), yield[ec]);
 
     boost::asio::async_connect(socket, endpoints, yield[ec]);
-    if(ec) return;
+    if (ec) return {m_io};
 
     std::vector<unsigned char> request(utils::HANDSHAKE_LENGTH, '\0');
 
@@ -34,16 +35,17 @@ void ConnectionManager::Init(boost::asio::ip::tcp::socket &socket,
                   begin(m_clientPeerID), end(m_clientPeerID));
 
     size_t sendBytes = boost::asio::async_write(socket, boost::asio::buffer(request), yield[ec]);
-    if (ec) return;
+    if (ec) return {m_io};
 
     std::string response(utils::HANDSHAKE_LENGTH, '\0');
 
     size_t responseBytes = boost::asio::async_read(socket, boost::asio::buffer(response), yield[ec]);
-    if (ec) return;
+    if (ec) return {m_io};
+
     if (sendBytes != responseBytes)
     {
         ec.assign(boost::system::errc::bad_message, boost::system::system_category());
-        return;
+        if (ec) return {m_io};
     }
 
     int8_t responseProtocolID = static_cast<int8_t>(response[0]);
@@ -63,21 +65,25 @@ void ConnectionManager::Init(boost::asio::ip::tcp::socket &socket,
     if (requstProtocol != responseProtocol || m_torrentInfo.GetInfoHash() != responseHash)
     {
         ec.assign(boost::system::errc::bad_message, boost::system::system_category());
-        return;
+        if (ec) return {m_io};
     }
+
+    return PeerSession{m_io, std::move(socket)};
 }
 
-void ConnectionManager::Listen(boost::asio::ip::tcp::socket &socket,
-                               boost::asio::yield_context yield,
-                               boost::system::error_code &ec,
-                               int32_t port)
+PeerSession ConnectionManager::Listen(boost::asio::yield_context yield,
+                                      boost::system::error_code &ec,
+                                      int16_t port)
 {
+    boost::asio::ip::tcp::socket socket(m_io);
+
     m_acceptor.open(boost::asio::ip::tcp::v4());
     m_acceptor.bind(boost::asio::ip::tcp::endpoint(boost::asio::ip::tcp::v4(), port));
     m_acceptor.listen();
 
     m_acceptor.async_accept(socket, yield[ec]);
 
-    if (ec)
-        return;
+    if (ec) return {m_io};
+
+    return PeerSession{m_io, std::move(socket)};
 }

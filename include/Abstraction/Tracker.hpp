@@ -19,6 +19,7 @@ public:
                                  std::unordered_map<std::string, std::string> &data,
                                  boost::system::error_code &ec) = 0;
 
+    std::string GetURL() const { return m_url; }
 protected:
     boost::asio::io_context &m_io;
 

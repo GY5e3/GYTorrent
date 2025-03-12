@@ -7,13 +7,15 @@
 #include <vector>
 #include <unordered_map>
 
-#include <boost/asio.hpp>
+#include <boost/asio/io_context.hpp>
 #include <boost/asio/spawn.hpp>
 
 #include "TorrentMetaData.hpp"
-#include "Abstraction/Tracker.hpp"
 #include "TrackerHTTP.hpp"
 #include "TrackerUDP.hpp"
+
+#include "TrackerAnnouncer.hpp"
+#include "ConnectionManager.hpp"
 
 class TorrentClient
 {
@@ -22,6 +24,7 @@ public:
     TorrentClient(std::string torrentFilePath, std::string downloadPath, uint16_t port = 6881);
 
     void Execute();
+
 private:
     std::string m_torrentFilePath;
     std::string m_downloadPath;
@@ -31,9 +34,13 @@ private:
 
     std::vector<bool> m_bitField;
 
-    std::unordered_map<std::string, boost::asio::ip::tcp::socket> m_connections;
+    inline static std::vector<utils::Peer> m_peersList;
+
+    static void trackerCallback(const std::string &trackerURL,
+                                const std::vector<utils::Peer> &,
+                                boost::system::error_code);
+
     /// @brief Generate PeerID for client
     /// @return PeerID in the format: -GYTORR-dddddddddddd, where 'd' - digit in the range from 0 to 9
     std::string generatePeerID() const;
 };
-
