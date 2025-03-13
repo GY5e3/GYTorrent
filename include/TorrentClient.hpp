@@ -16,6 +16,7 @@
 
 #include "TrackerAnnouncer.hpp"
 #include "ConnectionManager.hpp"
+#include "SessionManager.hpp"
 
 class TorrentClient
 {
@@ -34,11 +35,15 @@ private:
 
     std::vector<bool> m_bitField;
 
+    inline static std::shared_ptr<SessionManager> m_sessionManager;
+
     inline static std::vector<utils::Peer> m_peersList;
 
     static void trackerCallback(const std::string &trackerURL,
                                 const std::vector<utils::Peer> &,
                                 boost::system::error_code);
+    
+    static void peerCallback(const std::string& peer, const utils::Message& message, bool isIncoming, boost::system::error_code ec);
 
     /// @brief Generate PeerID for client
     /// @return PeerID in the format: -GYTORR-dddddddddddd, where 'd' - digit in the range from 0 to 9

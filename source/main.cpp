@@ -2,11 +2,10 @@
 #include <utility>
 #include <filesystem>
 
-#include "../include/PeerSession.hpp"
 #include <boost/asio/spawn.hpp>
 
+#include "../include/TorrentClient.hpp"
 #include "../include/TrackerAnnouncer.hpp"
-
 #include "../include/TorrentMetaData.hpp"
 #include "../include/TrackerHTTP.hpp"
 #include "../include/TrackerUDP.hpp"
@@ -16,7 +15,7 @@
 
 #include "../utils/BitTorrentConstants.hpp"
 
-#include "../include/TorrentClient.hpp"
+
 
 
 void CallBack(boost::asio::ip::tcp::socket &socket, std::vector<unsigned char> messageBuffer)
@@ -78,30 +77,12 @@ int main(int argc, char *argv[])
         exampleTracker = std::make_shared<TrackerHTTP>(io, trackerURL);
     
     boost::asio::ip::tcp::socket socket(io);
-    PeerSession ps(io, std::move(socket));
+    NetworkAction ps(io, std::move(socket));
 
     TorrentClient tc("../_input/28777.torrent", "", 6881);
 
     tc.Execute();
-/*
-boost::asio::spawn(io,
-                       [&io, exampleTracker, connectionManager, announcer, timer, &peerID, &tmd](boost::asio::yield_context yield)
-                       {
-                           boost::system::error_code ec;
 
-                           announcer->Start(exampleTracker, ec);
-                           if (ec)
-                           {
-                               ec.message();
-                           }
-                           timer->expires_after(std::chrono::seconds(15));
-                           timer->async_wait(yield);
-                           announcer->SetEvent("stopped");
-                           announcer->StopAll();
-                          
-                       });
-*/
-    
     io.run();
     return 0;
 }

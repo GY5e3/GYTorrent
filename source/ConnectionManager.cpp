@@ -9,7 +9,7 @@ ConnectionManager::ConnectionManager(boost::asio::io_context &io,
 {
 }
 
-PeerSession ConnectionManager::Init(const utils::Peer &peer,
+NetworkAction ConnectionManager::Init(const utils::Peer &peer,
                                     boost::asio::yield_context yield,
                                     boost::system::error_code &ec)
 {
@@ -68,10 +68,10 @@ PeerSession ConnectionManager::Init(const utils::Peer &peer,
         if (ec) return {m_io};
     }
 
-    return PeerSession{m_io, std::move(socket)};
+    return NetworkAction{m_io, std::move(socket)};
 }
 
-PeerSession ConnectionManager::Listen(boost::asio::yield_context yield,
+NetworkAction ConnectionManager::Listen(boost::asio::yield_context yield,
                                       boost::system::error_code &ec,
                                       int16_t port)
 {
@@ -85,5 +85,5 @@ PeerSession ConnectionManager::Listen(boost::asio::yield_context yield,
 
     if (ec) return {m_io};
 
-    return PeerSession{m_io, std::move(socket)};
+    return NetworkAction{m_io, std::move(socket)};
 }

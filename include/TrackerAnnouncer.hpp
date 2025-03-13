@@ -24,7 +24,7 @@ public:
 
     void Start(std::shared_ptr<Tracker> tracker, boost::system::error_code &ecTracker);
 
-    void Update(std::shared_ptr<Tracker> tracker, uint32_t interval = 0);
+    void Update(std::shared_ptr<Tracker> tracker);
 
     void StopAll();
 

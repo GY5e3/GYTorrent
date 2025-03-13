@@ -22,6 +22,8 @@ void TorrentClient::Execute()
 
     auto announcer = std::make_shared<TrackerAnnouncer>(io, infoHash, m_peerID, m_port, trackerCallback);
     auto connectionManager = std::make_shared<ConnectionManager>(io, tmd, m_peerID);
+    
+    m_sessionManager = std::make_shared<SessionManager>(io, peerCallback);
 
     boost::asio::spawn(io, [this, &io, announcer, connectionManager, &tmd](boost::asio::yield_context yield)
                        {   
@@ -42,15 +44,14 @@ void TorrentClient::Execute()
         } 
 
         boost::asio::steady_timer cooldown(io);
-        cooldown.expires_after(std::chrono::seconds(10));
+        cooldown.expires_after(std::chrono::seconds(7));
         cooldown.async_wait(yield[ec]);
 
         for (size_t i = 0; i < m_peersList.size(); i++)
         {
-            boost::asio::spawn(io, [&, peer = m_peersList[i]](boost::asio::yield_context yield)
+            boost::asio::spawn(io, [this, connectionManager, peer = m_peersList[i]](boost::asio::yield_context yield)
             {
                 boost::system::error_code ec;
-                auto socket = std::make_shared<boost::asio::ip::tcp::socket>(io);
 
                 auto session = connectionManager->Init(peer, yield, ec);
                 if (ec) 
@@ -59,26 +60,7 @@ void TorrentClient::Execute()
                 {
                     std::cout << "Connection w/ " + peer.ToString() + " is success!" << std::endl;
 
-                    auto response = session.Recieve(yield, ec);
-
-
-                    int messageID = response.size() ? static_cast<int>(response[0]) : static_cast<int>(utils::MessageID::keepAlive);
-                    std::ostringstream os;
-                    if (messageID == static_cast<int>(utils::MessageID::bitField))
-                    {
-                        os << "BitField by " + peer.ToString() << ":";
-                        std::vector<bool> bf;
-                        for (size_t i = 1; i < response.size(); i++)
-                        {
-                            unsigned char byte = response[i];
-                            for (int j = 7; j >= 0; --j)
-                                bf.push_back(byte & (1 << j));
-                        }
-                        for (auto mes : bf)
-                            os << " " << mes;
-                        os << std::dec << "\n";
-                        std::cout << os.str();
-                    }
+                    TorrentClient::m_sessionManager->Start(peer.ToString(), session);
                 }
             });
         } });
@@ -89,16 +71,40 @@ void TorrentClient::trackerCallback(const std::string &trackerURL,
                                     const std::vector<utils::Peer> &peers,
                                     boost::system::error_code ec)
 {
+    auto now = std::chrono::system_clock::now();  
+        std::time_t now_time = std::chrono::system_clock::to_time_t(now);  
     if (ec)
     {
-        std::cout << "Tracker error: " + ec.message() << std::endl;
+        std::cout << std::put_time(std::localtime(&now_time), "%H:%M:%S") << "-----------Tracker " + trackerURL + " error: " + ec.message() << std::endl;
         return;
     }
     else
     {
-        std::cout << "Update for " + trackerURL << std::endl;
+        std::cout << std::put_time(std::localtime(&now_time), "%H:%M:%S") << "-----------Update for " + trackerURL << std::endl;
     }
     m_peersList.insert(end(m_peersList), begin(peers), end(peers));
+}
+
+void TorrentClient::peerCallback(const std::string &peer, const utils::Message &message, bool isIncoming, boost::system::error_code ec)
+{
+    auto now = std::chrono::system_clock::now();  
+    std::time_t now_time = std::chrono::system_clock::to_time_t(now);
+    if (ec)
+    {
+        m_sessionManager->Stop(peer);
+        std::cout << std::put_time(std::localtime(&now_time), "%H:%M:%S") << "-----------Peer " + peer + " error: " + ec.message() << std::endl;
+        return;
+    }
+    else if(isIncoming)
+    {
+        std::cout << std::put_time(std::localtime(&now_time), "%H:%M:%S") << "-----------Peer " + peer + " send to me message " << static_cast<int>(message.MessageID) << std::endl;
+    }
+    else
+    {
+        std::cout << std::put_time(std::localtime(&now_time), "%H:%M:%S") << "-----------I has sent to " + peer + " message " << static_cast<int>(message.MessageID) << std::endl;
+    }
+    
+    ///TODO: smth w/ incoming message in here :/
 }
 
 std::string TorrentClient::generatePeerID() const

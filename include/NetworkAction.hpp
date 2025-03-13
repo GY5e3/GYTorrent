@@ -1,5 +1,6 @@
 #pragma once
 
+#include <boost/core/scoped_enum.hpp>
 #include <boost/asio/ip/tcp.hpp>
 #include <boost/asio/spawn.hpp>
 #include <boost/asio/read.hpp>
@@ -8,14 +9,14 @@
 #include "BitTorrentConstants.hpp"
 #include "Functors/build_request.hpp"
 
-class PeerSession
+class NetworkAction
 {
 public:
-    PeerSession() = delete;
+    NetworkAction() = delete;
 
-    PeerSession(boost::asio::io_context &io);
+    NetworkAction(boost::asio::io_context &io);
 
-    PeerSession(boost::asio::io_context &io,
+    NetworkAction(boost::asio::io_context &io,
                 boost::asio::ip::tcp::socket socket);
 
     void Send(boost::asio::yield_context yield,
