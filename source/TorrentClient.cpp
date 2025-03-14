@@ -26,7 +26,7 @@ void TorrentClient::Execute()
     m_sessionManager = std::make_shared<SessionManager>(io, peerCallback);
 
     boost::asio::spawn(io, [this, &io, announcer, connectionManager, &tmd](boost::asio::yield_context yield)
-                       {   
+    {   
         boost::system::error_code ec;
 
         auto trackerURLs = tmd.GetTrackerURLs();
@@ -61,9 +61,14 @@ void TorrentClient::Execute()
                     std::cout << "Connection w/ " + peer.ToString() + " is success!" << std::endl;
 
                     TorrentClient::m_sessionManager->Start(peer.ToString(), session);
+
+                    utils::Message interested; interested.MessageID = utils::MessageID::interested;
+
+                    TorrentClient::m_sessionManager->SendMessage(peer.ToString(), interested);
                 }
             });
-        } });
+        } 
+    });
 
     io.run();
 }
@@ -72,7 +77,7 @@ void TorrentClient::trackerCallback(const std::string &trackerURL,
                                     boost::system::error_code ec)
 {
     auto now = std::chrono::system_clock::now();  
-        std::time_t now_time = std::chrono::system_clock::to_time_t(now);  
+    std::time_t now_time = std::chrono::system_clock::to_time_t(now);  
     if (ec)
     {
         std::cout << std::put_time(std::localtime(&now_time), "%H:%M:%S") << "-----------Tracker " + trackerURL + " error: " + ec.message() << std::endl;
@@ -89,11 +94,16 @@ void TorrentClient::peerCallback(const std::string &peer, const utils::Message &
 {
     auto now = std::chrono::system_clock::now();  
     std::time_t now_time = std::chrono::system_clock::to_time_t(now);
-    if (ec)
+    if(ec == utils::torrent_errc::block_request_timeout)
     {
         m_sessionManager->Stop(peer);
         std::cout << std::put_time(std::localtime(&now_time), "%H:%M:%S") << "-----------Peer " + peer + " error: " + ec.message() << std::endl;
-        return;
+        ///TODO: implement logic to return blocks to the general queue
+    }
+    else if (ec)
+    {
+        m_sessionManager->Stop(peer);
+        std::cout << std::put_time(std::localtime(&now_time), "%H:%M:%S") << "-----------Peer " + peer + " error: " + ec.message() << std::endl;
     }
     else if(isIncoming)
     {

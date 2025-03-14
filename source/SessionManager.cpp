@@ -7,13 +7,21 @@ SessionManager::SessionManager(boost::asio::io_context &io, callback_function ca
 
 void SessionManager::Start(const std::string &peer, NetworkAction communication)
 {
-    m_temp.insert({peer, Session{m_io, communication}});
+    m_sessions.insert({peer, Session{m_io, communication}});
 
     AwaitMessage(peer);
 }
 
 void SessionManager::SendMessage(const std::string &peer, const utils::Message &message)
 {
+    auto it = m_sessions.find(peer);
+    if (it == m_sessions.end())
+    {   
+        ///TODO:
+        // auto ec = make_error_code(utils::torrent_errc::custom_error);
+        // m_callback(peer, {}, false, ec);
+        return;
+    } 
     std::vector<unsigned char> data;
     switch (message.MessageID)
     {
@@ -53,7 +61,6 @@ void SessionManager::SendMessage(const std::string &peer, const utils::Message &
         build_request(data, 5, begin(message.BitField), end(message.BitField));
         break;
     }
-    case utils::MessageID::request:
     case utils::MessageID::cancel:
     {
         int32_t mesLen = 13;
@@ -63,6 +70,10 @@ void SessionManager::SendMessage(const std::string &peer, const utils::Message &
         build_request(data, 5, message.PieceIndex);
         build_request(data, 9, message.Offset);
         build_request(data, 13, message.Length);
+    }
+    case utils::MessageID::request:
+    {
+        awaitBlock(peer, message.PieceIndex, message.Offset);
         break;
     }
     case utils::MessageID::piece:
@@ -86,16 +97,16 @@ void SessionManager::SendMessage(const std::string &peer, const utils::Message &
         break;
     }
     }
-    boost::asio::spawn(m_io, [this, peer, message, data](boost::asio::yield_context yield)
+    boost::asio::spawn(m_io, [this, it, peer, message, data = std::move(data)](boost::asio::yield_context yield)
     {
         boost::system::error_code ec;
-        m_temp.find(peer)->second.Interact.Send(yield, data, ec);
+        it->second.Interact.Send(yield, data, ec);
         if(ec)
         {
             m_callback(peer, {}, false, ec);
             return;
         }
-        m_temp.find(peer)->second.KeepAliveTimer.cancel();
+        m_sessions.find(peer)->second.KeepAliveTimer.cancel();
         m_callback(peer, message, false, ec);
         Update(peer); 
     });
@@ -103,32 +114,61 @@ void SessionManager::SendMessage(const std::string &peer, const utils::Message &
 
 void SessionManager::AwaitMessage(const std::string &peer)
 {
-    boost::asio::spawn(m_io, [this, peer](boost::asio::yield_context yield)
+    auto it = m_sessions.find(peer);
+    if (it == m_sessions.end())
+    {   
+        ///TODO:
+        // auto ec = make_error_code(utils::torrent_errc::custom_error);
+        // m_callback(peer, {}, false, ec);
+        return;
+    } 
+    boost::asio::spawn(m_io, [this, it, peer](boost::asio::yield_context yield)
     {
         boost::system::error_code ec;
-        auto it = m_temp.find(peer);
-        if (it == m_temp.end()) return;
-        while (true) 
+        
+        while (true)
         {
             auto temp = it->second.Interact.Recieve(yield, ec);
             if (ec)
             {
                 m_callback(peer, {}, true, ec);
-                break; 
+                break;
             }
-
             it->second.KeepAliveTimer.cancel();
+
             utils::Message incoming;
             incoming.MessageID = temp.empty() ? utils::MessageID::keepAlive : static_cast<utils::MessageID>(temp[0]);
-
             switch (incoming.MessageID)
             {
+            case utils::MessageID::choke:
+            {
+                it->second.IsChokeMe = true;
+                break;
+            }
+            case utils::MessageID::unchoke:
+            {
+                it->second.IsChokeMe = false;
+                break;
+            }
+            case utils::MessageID::interested:
+            {
+               it->second.IsInterested = true;
+               break;
+            }
+            case utils::MessageID::notInterested:
+            {
+               it->second.IsInterested = false;
+               break;
+            }
             case utils::MessageID::have:
             {
                 incoming.PieceIndex = (static_cast<int32_t>(temp[1]) << 24) |
                                       (static_cast<int32_t>(temp[2]) << 16) |
                                       (static_cast<int32_t>(temp[3]) << 8)  |
                                        static_cast<int32_t>(temp[4]);
+
+                if (it->second.BitField.size() > incoming.PieceIndex)
+                    it->second.BitField[incoming.PieceIndex] = true;
                 break;
             }
             case utils::MessageID::bitField:
@@ -139,6 +179,7 @@ void SessionManager::AwaitMessage(const std::string &peer)
                     for (int j = 7; j >= 0; j--)
                         incoming.BitField.push_back(byte & (1 << j));
                 }
+                it->second.BitField.assign(begin(incoming.BitField), end(incoming.BitField));
                 break;
             }
             case utils::MessageID::request:
@@ -153,8 +194,8 @@ void SessionManager::AwaitMessage(const std::string &peer)
                                   (static_cast<int32_t>(temp[6]) << 16) |
                                   (static_cast<int32_t>(temp[7]) << 8)  |
                                    static_cast<int32_t>(temp[8]);
-                
-                incoming.Length = (static_cast<int32_t>(temp[9])  << 24)  |
+
+                incoming.Length = (static_cast<int32_t>(temp[9]) << 24)  |
                                   (static_cast<int32_t>(temp[10]) << 16) |
                                   (static_cast<int32_t>(temp[11]) << 8)  |
                                    static_cast<int32_t>(temp[12]);
@@ -172,6 +213,8 @@ void SessionManager::AwaitMessage(const std::string &peer)
                                   (static_cast<int32_t>(temp[7]) << 8)  |
                                    static_cast<int32_t>(temp[8]);
 
+                it->second.RequestedBlocks[{incoming.PieceIndex, incoming.Offset}]->cancel();
+
                 incoming.Length = temp.size() - 9;
                 incoming.Block.assign(temp.begin() + 9, temp.end());
                 break;
@@ -184,20 +227,26 @@ void SessionManager::AwaitMessage(const std::string &peer)
             }
             }
             m_callback(peer, incoming, true, ec);
-            
-            Update(peer); 
-        }
-    
+
+            Update(peer);
+        } 
     });
 }
 
 void SessionManager::Update(const std::string &peer)
 {
-    boost::asio::spawn(m_io, [this, peer](boost::asio::yield_context yield)
+    auto it = m_sessions.find(peer);
+    if (it == m_sessions.end())
+    {   
+        ///TODO:
+        // auto ec = make_error_code(utils::torrent_errc::custom_error);
+        // m_callback(peer, {}, false, ec);
+        return;
+    }  
+    boost::asio::spawn(m_io, [this, it, peer](boost::asio::yield_context yield)
     {
         boost::system::error_code ec;
-        auto it = m_temp.find(peer);
-        if (it == m_temp.end()) return; 
+        
         while (true)
         {
             it->second.KeepAliveTimer.expires_after(std::chrono::seconds(60));
@@ -205,13 +254,47 @@ void SessionManager::Update(const std::string &peer)
             if (ec) break; 
 
             SendMessage(peer, utils::Message{}); 
-        }
+        } 
     });
 }
 
 void SessionManager::Stop(const std::string &peer)
 {
-    m_temp.find(peer)->second.KeepAliveTimer.cancel();
+    auto it = m_sessions.find(peer);
+    if (it == m_sessions.end()) return;
 
-    m_temp.erase(peer);
+    it->second.KeepAliveTimer.cancel();
+    for (auto timers : it->second.RequestedBlocks)
+    {
+        timers.second->cancel();
+
+        boost::system::error_code torrentEC = make_error_code(utils::torrent_errc::block_request_timeout);
+        m_callback(peer, {}, false, torrentEC);
+    }
+
+    m_sessions.erase(peer);
+}
+
+void SessionManager::awaitBlock(const std::string &peer, int32_t pieceIndex, int32_t offset)
+{
+    auto blockTimer = std::make_shared<boost::asio::steady_timer>(m_io);
+    m_sessions.find(peer)->second.RequestedBlocks.insert({{pieceIndex, offset}, blockTimer});
+    boost::asio::spawn(m_io, [this, blockTimer, peer, pieceIndex, offset](boost::asio::yield_context yield)
+    {
+        boost::system::error_code timerEC;
+        blockTimer->expires_after(std::chrono::seconds(10));
+        blockTimer->async_wait(yield[timerEC]);
+        m_sessions.find(peer)->second.RequestedBlocks.erase({pieceIndex, offset});
+        if(!timerEC)
+        {
+            boost::system::error_code torrentEC = make_error_code(utils::torrent_errc::block_request_timeout);
+            m_callback(peer, {}, false, torrentEC);
+
+            utils::Message message;
+            message.MessageID = utils::MessageID::cancel;
+            message.PieceIndex = pieceIndex;
+            message.Offset = offset;
+            SendMessage(peer, message);
+        } 
+    });
 }

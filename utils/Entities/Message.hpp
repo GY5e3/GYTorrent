@@ -14,7 +14,7 @@ namespace utils
         utils::MessageID MessageID = utils::MessageID::keepAlive;
         int32_t PieceIndex = 0;
         int32_t Offset = 0;
-        int32_t Length = 0;
+        int32_t Length = utils::BLOCK_SIZE;
         std::vector<bool> BitField;
         std::vector<unsigned char> Block;
         int16_t Port = 0;

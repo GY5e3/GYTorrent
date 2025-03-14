@@ -50,7 +50,7 @@ void TrackerAnnouncer::Update(std::shared_ptr<Tracker> tracker)
             m_callback(tracker->GetURL(), response.GetPeers(), ecTracker);
 
 
-            interval = 120;
+            interval = response.GetInterval();
         } 
     });
 }
