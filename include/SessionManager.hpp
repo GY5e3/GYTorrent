@@ -2,6 +2,7 @@
 
 #include <iostream>
 #include <memory>
+#include <queue>
 
 #include <boost/asio/io_context.hpp>
 #include <boost/asio/spawn.hpp>
@@ -26,6 +27,8 @@ public:
     void Update(const std::string &peer);
 
     void Stop(const std::string &peer);
+
+    std::string GetAvailablePeer(int32_t pieceIndex, int32_t requstedBlocksCount);
 
 private:
     utils::build_request build_request;
@@ -54,13 +57,11 @@ private:
 
         NetworkAction Interact;
 
-        std::vector<bool> BitField;
-
-        Session(boost::asio::io_context &io, NetworkAction interact) : Interact(interact), KeepAliveTimer(io) {}
-
         boost::asio::steady_timer KeepAliveTimer;
-
+        std::vector<bool> BitField;
         std::unordered_map<std::pair<int32_t, int32_t>, std::shared_ptr<boost::asio::steady_timer>, PairHash> RequestedBlocks;
+
+        Session(boost::asio::io_context &io, NetworkAction interact) : Interact(interact), KeepAliveTimer(io) {}        
     };
 
     std::unordered_map<std::string, Session> m_sessions;
@@ -68,5 +69,4 @@ private:
     std::function<void(const std::string &, const utils::Message &, bool isIncoming, boost::system::error_code)> m_callback;
 
     void awaitBlock(const std::string &peer, int32_t pieceIndex, int32_t offset);
-
 };

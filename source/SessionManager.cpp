@@ -16,12 +16,12 @@ void SessionManager::SendMessage(const std::string &peer, const utils::Message &
 {
     auto it = m_sessions.find(peer);
     if (it == m_sessions.end())
-    {   
-        ///TODO:
+    {
+        /// TODO:
         // auto ec = make_error_code(utils::torrent_errc::custom_error);
         // m_callback(peer, {}, false, ec);
         return;
-    } 
+    }
     std::vector<unsigned char> data;
     switch (message.MessageID)
     {
@@ -116,12 +116,12 @@ void SessionManager::AwaitMessage(const std::string &peer)
 {
     auto it = m_sessions.find(peer);
     if (it == m_sessions.end())
-    {   
-        ///TODO:
+    {
+        /// TODO:
         // auto ec = make_error_code(utils::torrent_errc::custom_error);
         // m_callback(peer, {}, false, ec);
         return;
-    } 
+    }
     boost::asio::spawn(m_io, [this, it, peer](boost::asio::yield_context yield)
     {
         boost::system::error_code ec;
@@ -237,12 +237,12 @@ void SessionManager::Update(const std::string &peer)
 {
     auto it = m_sessions.find(peer);
     if (it == m_sessions.end())
-    {   
-        ///TODO:
+    {
+        /// TODO:
         // auto ec = make_error_code(utils::torrent_errc::custom_error);
         // m_callback(peer, {}, false, ec);
         return;
-    }  
+    }
     boost::asio::spawn(m_io, [this, it, peer](boost::asio::yield_context yield)
     {
         boost::system::error_code ec;
@@ -261,7 +261,13 @@ void SessionManager::Update(const std::string &peer)
 void SessionManager::Stop(const std::string &peer)
 {
     auto it = m_sessions.find(peer);
-    if (it == m_sessions.end()) return;
+    if (it == m_sessions.end())
+    {
+        /// TODO:
+        // auto ec = make_error_code(utils::torrent_errc::custom_error);
+        // m_callback(peer, {}, false, ec);
+        return;
+    }
 
     it->second.KeepAliveTimer.cancel();
     for (auto timers : it->second.RequestedBlocks)
@@ -297,4 +303,30 @@ void SessionManager::awaitBlock(const std::string &peer, int32_t pieceIndex, int
             SendMessage(peer, message);
         } 
     });
+}
+
+std::string SessionManager::GetAvailablePeer(int32_t pieceIndex, int32_t requestedBlocksCount)
+{
+    auto comparator = [](const auto &a, const auto &b)
+    {
+        if (a.second != b.second)
+            return a.second < b.second;
+        return rand() % 2;
+    };
+
+    std::priority_queue<std::pair<std::string, int32_t>,
+                        std::vector<std::pair<std::string, int32_t>>,
+                        decltype(comparator)>
+        q(comparator);
+
+    for (const auto &session : m_sessions)
+    {
+        if (session.second.IsChokeMe == false &&
+            session.second.BitField[pieceIndex] == true &&
+            session.second.RequestedBlocks.size() <= requestedBlocksCount)
+        {
+            q.push({session.first, session.second.RequestedBlocks.size()});
+        }
+    }
+    return q.top().first;
 }

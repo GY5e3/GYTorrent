@@ -5,6 +5,7 @@
 #include <random>
 #include <string>
 #include <vector>
+#include <queue>
 #include <unordered_map>
 
 #include <boost/asio/io_context.hpp>
@@ -14,6 +15,7 @@
 #include "TrackerHTTP.hpp"
 #include "TrackerUDP.hpp"
 
+#include "PieceManager.hpp"
 #include "TrackerAnnouncer.hpp"
 #include "ConnectionManager.hpp"
 #include "SessionManager.hpp"
@@ -34,6 +36,8 @@ private:
     std::string m_peerID;
 
     std::vector<bool> m_bitField;
+
+    std::queue<utils::Message> m_messageQueue;
 
     inline static std::shared_ptr<SessionManager> m_sessionManager;
 

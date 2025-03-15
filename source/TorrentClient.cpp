@@ -22,10 +22,11 @@ void TorrentClient::Execute()
 
     auto announcer = std::make_shared<TrackerAnnouncer>(io, infoHash, m_peerID, m_port, trackerCallback);
     auto connectionManager = std::make_shared<ConnectionManager>(io, tmd, m_peerID);
+    auto pieceManager = std::make_shared<PieceManager>(true, tmd, "");
     
     m_sessionManager = std::make_shared<SessionManager>(io, peerCallback);
 
-    boost::asio::spawn(io, [this, &io, announcer, connectionManager, &tmd](boost::asio::yield_context yield)
+    boost::asio::spawn(io, [this, &io, announcer, connectionManager, pieceManager, &tmd](boost::asio::yield_context yield)
     {   
         boost::system::error_code ec;
 
@@ -62,12 +63,12 @@ void TorrentClient::Execute()
 
                     TorrentClient::m_sessionManager->Start(peer.ToString(), session);
 
-                    utils::Message interested; interested.MessageID = utils::MessageID::interested;
+                    utils::Message interested{utils::MessageID::interested};
 
                     TorrentClient::m_sessionManager->SendMessage(peer.ToString(), interested);
                 }
             });
-        } 
+        }
     });
 
     io.run();
@@ -108,6 +109,10 @@ void TorrentClient::peerCallback(const std::string &peer, const utils::Message &
     else if(isIncoming)
     {
         std::cout << std::put_time(std::localtime(&now_time), "%H:%M:%S") << "-----------Peer " + peer + " send to me message " << static_cast<int>(message.MessageID) << std::endl;
+        if(message.MessageID == utils::MessageID::piece)
+        {
+            
+        }
     }
     else
     {
