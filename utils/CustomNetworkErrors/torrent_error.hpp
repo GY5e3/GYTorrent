@@ -2,18 +2,38 @@
 #include <iostream>
 #include <string>
 
-/* 
+/*
 Look for template here:
 https://github.com/boostorg/outcome/blob/master/doc/src/snippets/boost-only/error_code_registration.cpp#L32
 */
 
+enum class torrent_errc
+{
+    success = 0, // 0 should not represent an error
+    block_request_timeout = 1,
+};
+
+namespace boost
+{
+    namespace system
+    {
+        // Tell the C++ 11 STL metaprogramming that enum torrent_errc
+        // is registered with the standard error code system
+        template <>
+        struct is_error_code_enum<torrent_errc> : std::true_type
+        {
+        };
+
+        // inline error_code make_error_code(utils::torrent_errc e)
+        // {
+        // return {static_cast<int>(e), torrent_error()};
+        //  return error_code(static_cast<int>(e), generic_category());
+        //}
+    } // namespace system
+} // namespace boost
+
 namespace utils
 {
-    enum class torrent_errc
-    {
-        success = 0, // 0 should not represent an error
-        block_request_timeout = 1,
-    };
 
     class torrent_error : public boost::system::error_category
     {
@@ -48,18 +68,6 @@ namespace utils
     };
 } // namespace utils
 
-namespace boost
-{
-    namespace system
-    {
-        // Tell the C++ 11 STL metaprogramming that enum torrent_errc
-        // is registered with the standard error code system
-        template <>
-        struct is_error_code_enum<utils::torrent_errc> : std::true_type
-        {
-        };
-    } // namespace system
-} // namespace boost
 
 
 // Define the linkage for this function to be used by external code.
@@ -77,7 +85,7 @@ THIS_MODULE_API_DECL const utils::torrent_error &torrent_error()
 
 // Overload the global make_error_code() free function with our
 // custom enum. It will be found via ADL by the compiler if needed.
-inline boost::system::error_code make_error_code(utils::torrent_errc e)
+inline boost::system::error_code make_error_code(torrent_errc e)
 {
     return {static_cast<int>(e), torrent_error()};
 }

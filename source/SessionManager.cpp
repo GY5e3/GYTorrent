@@ -274,7 +274,7 @@ void SessionManager::Stop(const std::string &peer)
     {
         timers.second->cancel();
 
-        boost::system::error_code torrentEC = make_error_code(utils::torrent_errc::block_request_timeout);
+        boost::system::error_code torrentEC = make_error_code(torrent_errc::block_request_timeout);
         m_callback(peer, {}, false, torrentEC);
     }
 
@@ -293,7 +293,7 @@ void SessionManager::awaitBlock(const std::string &peer, int32_t pieceIndex, int
         m_sessions.find(peer)->second.RequestedBlocks.erase({pieceIndex, offset});
         if(!timerEC)
         {
-            boost::system::error_code torrentEC = make_error_code(utils::torrent_errc::block_request_timeout);
+            boost::system::error_code torrentEC = make_error_code(torrent_errc::block_request_timeout);
             m_callback(peer, {}, false, torrentEC);
 
             utils::Message message;
@@ -311,7 +311,7 @@ std::string SessionManager::GetAvailablePeer(int32_t pieceIndex, int32_t request
     {
         if (a.second != b.second)
             return a.second < b.second;
-        return rand() % 2;
+        return rand() % 2 == 0;
     };
 
     std::priority_queue<std::pair<std::string, int32_t>,

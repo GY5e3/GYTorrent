@@ -24,11 +24,12 @@ public:
     int64_t GetCreationDate() const;
     int64_t GetPieceLength() const;
 
-    std::vector<std::string> GetTrackerURLs() const;
-    std::vector<utils::File> GetFiles() const;
-    std::vector<utils::Piece> GetPieces() const;
+    const std::vector<std::string> &GetTrackerURLs() const;
+    const std::vector<utils::File> &GetFiles() const;
+    const std::vector<utils::Piece> &GetPieces() const;
 
     std::vector<unsigned char> GetInfoHash() const;
+
 private:
     std::string m_name;
     std::string m_announce;

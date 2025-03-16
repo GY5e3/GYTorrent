@@ -12,6 +12,9 @@
 #include <condition_variable>
 #include <fstream>
 
+#include <boost/interprocess/file_mapping.hpp>
+#include <boost/interprocess/mapped_region.hpp>
+
 #include <openssl/sha.h>
 
 #include <TorrentMetaData.hpp>
@@ -22,13 +25,17 @@
 class PieceManager
 {
 public:
+    PieceManager() = delete;
+
     PieceManager(bool isSequential, const TorrentMetaData &torrentMetaData, const std::string &absolutePath = "");
+
+    ~PieceManager();
 
     std::vector<utils::Message> LoadNextPiece();
 
     void AcceptBlock(const std::string& peer, utils::Message& message);
 
-    void SavePieceOnDisk(const std::vector<unsigned char>& piece);
+    void SavePieceOnDisk(int32_t index, const std::vector<unsigned char>& piece);
 
 private:
     bool m_isSequential;
@@ -51,6 +58,7 @@ private:
         std::unordered_set<std::string> Senders;
 
         PieceData() = default;
+        ~PieceData() = default;
         PieceData(int32_t remainingBlocksCount) : RemainingBlocksCount(remainingBlocksCount) {}
     };
     /// @brief Stores indexes of pieces that are being loaded right now
@@ -59,12 +67,11 @@ private:
     /// @brief Stores indexes of missing pieces
     std::map<int32_t, int32_t> m_missingPieces;
 
-
-    //preparation
-
     std::queue<std::pair<int32_t, std::vector<unsigned char>>> m_writeQueue;
     std::mutex m_queueMutex;
     std::condition_variable m_condition;
     std::thread m_writerThread;
     bool m_stop;
+
+    void WriteThread();
 };

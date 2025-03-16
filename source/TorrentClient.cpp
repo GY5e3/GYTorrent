@@ -95,7 +95,7 @@ void TorrentClient::peerCallback(const std::string &peer, const utils::Message &
 {
     auto now = std::chrono::system_clock::now();  
     std::time_t now_time = std::chrono::system_clock::to_time_t(now);
-    if(ec == utils::torrent_errc::block_request_timeout)
+    if(ec == torrent_errc::block_request_timeout)
     {
         m_sessionManager->Stop(peer);
         std::cout << std::put_time(std::localtime(&now_time), "%H:%M:%S") << "-----------Peer " + peer + " error: " + ec.message() << std::endl;
