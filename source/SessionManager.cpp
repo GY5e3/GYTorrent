@@ -134,7 +134,6 @@ void SessionManager::AwaitMessage(const std::string &peer)
                 m_callback(peer, {}, true, ec);
                 break;
             }
-            it->second.KeepAliveTimer.cancel();
 
             utils::Message incoming;
             incoming.MessageID = temp.empty() ? utils::MessageID::keepAlive : static_cast<utils::MessageID>(temp[0]);
@@ -227,8 +226,6 @@ void SessionManager::AwaitMessage(const std::string &peer)
             }
             }
             m_callback(peer, incoming, true, ec);
-
-            Update(peer);
         } 
     });
 }
@@ -249,7 +246,7 @@ void SessionManager::Update(const std::string &peer)
         
         while (true)
         {
-            it->second.KeepAliveTimer.expires_after(std::chrono::seconds(60));
+            it->second.KeepAliveTimer.expires_after(std::chrono::seconds(120));
             it->second.KeepAliveTimer.async_wait(yield[ec]);
             if (ec) break; 
 
@@ -305,7 +302,7 @@ void SessionManager::awaitBlock(const std::string &peer, int32_t pieceIndex, int
     });
 }
 
-std::string SessionManager::GetAvailablePeer(int32_t pieceIndex, int32_t requestedBlocksCount)
+std::string SessionManager::GetAvailablePeer(int32_t pieceIndex, int32_t requestedBlocksCount) const
 {
     auto comparator = [](const auto &a, const auto &b)
     {
@@ -328,5 +325,10 @@ std::string SessionManager::GetAvailablePeer(int32_t pieceIndex, int32_t request
             q.push({session.first, session.second.RequestedBlocks.size()});
         }
     }
-    return q.top().first;
+    return q.size() ? q.top().first : "";
+}
+
+bool SessionManager::IsActive(const std::string &peer) const
+{
+    return m_sessions.find(peer) != end(m_sessions);
 }

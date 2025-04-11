@@ -28,8 +28,9 @@ public:
 
     void Stop(const std::string &peer);
 
-    std::string GetAvailablePeer(int32_t pieceIndex, int32_t requstedBlocksCount);
+    std::string GetAvailablePeer(int32_t pieceIndex, int32_t requstedBlocksCount) const;
 
+    bool IsActive(const std::string &peer) const;
 private:
     utils::build_request build_request;
 

@@ -20,7 +20,7 @@
 #include "ConnectionManager.hpp"
 #include "SessionManager.hpp"
 
-class TorrentClient
+class TorrentClient : public std::enable_shared_from_this<TorrentClient>
 {
 
 public:
@@ -29,6 +29,8 @@ public:
     void Execute();
 
 private:
+    boost::asio::io_context m_io;
+
     std::string m_torrentFilePath;
     std::string m_downloadPath;
     uint16_t m_port;
@@ -39,17 +41,19 @@ private:
 
     std::queue<utils::Message> m_messageQueue;
 
-    inline static std::shared_ptr<SessionManager> m_sessionManager;
+    std::shared_ptr<SessionManager> m_sessionManager;
+    std::shared_ptr<ConnectionManager> m_connectionManager;
+    std::shared_ptr<PieceManager> m_pieceManager;
 
-    inline static std::vector<utils::Peer> m_peersList;
-
-    static void trackerCallback(const std::string &trackerURL,
+    void trackerCallback(const std::string &trackerURL,
                                 const std::vector<utils::Peer> &,
                                 boost::system::error_code);
-    
-    static void peerCallback(const std::string& peer, const utils::Message& message, bool isIncoming, boost::system::error_code ec);
+
+    void peerCallback(const std::string &peer, const utils::Message &message, bool isIncoming, boost::system::error_code ec);
 
     /// @brief Generate PeerID for client
     /// @return PeerID in the format: -GYTORR-dddddddddddd, where 'd' - digit in the range from 0 to 9
     std::string generatePeerID() const;
+
+    void LeecherMode();
 };

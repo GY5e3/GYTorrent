@@ -25,26 +25,6 @@
 class PieceManager
 {
 public:
-    PieceManager() = delete;
-
-    PieceManager(bool isSequential, const TorrentMetaData &torrentMetaData, const std::string &absolutePath = "");
-
-    ~PieceManager();
-
-    std::vector<utils::Message> LoadNextPiece();
-
-    void AcceptBlock(const std::string& peer, utils::Message& message);
-
-    void SavePieceOnDisk(int32_t index, const std::vector<unsigned char>& piece);
-
-private:
-    bool m_isSequential;
-
-    TorrentMetaData m_torrentMetaData;
-
-    /// @brief Set of indexes of downloaded pieces
-    std::unordered_set<int32_t> m_downloadedPieces;
-
     /// @brief Auxiliary structure for data of a specific piece
     struct PieceData
     {
@@ -61,6 +41,31 @@ private:
         ~PieceData() = default;
         PieceData(int32_t remainingBlocksCount) : RemainingBlocksCount(remainingBlocksCount) {}
     };
+
+    PieceManager() = delete;
+
+    PieceManager(const TorrentMetaData &torrentMetaData, const std::string &absolutePath = "");
+
+    ~PieceManager();
+
+    std::vector<utils::Message> LoadNextPiece(bool isSequential = false);
+
+    void AcceptBlock(const std::string& peer, utils::Message& message);
+
+    void SavePieceOnDisk(int32_t index, const std::vector<unsigned char>& piece);
+
+    bool IsIncomplete() const;
+
+    const std::unordered_map<int32_t, PieceData>& GetOnDownloading() const;
+private:
+    TorrentMetaData m_torrentMetaData;
+
+    std::vector<int32_t> m_pieceRarity;
+
+    /// @brief Set of indexes of downloaded pieces
+    std::unordered_set<int32_t> m_downloadedPieces;
+
+    
     /// @brief Stores indexes of pieces that are being loaded right now
     std::unordered_map<int32_t, PieceData> m_onDownloadingPieces; 
 
@@ -74,4 +79,5 @@ private:
     bool m_stop;
 
     void WriteThread();
+
 };

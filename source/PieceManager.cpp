@@ -1,9 +1,7 @@
 #include "PieceManager.hpp"
 
-PieceManager::PieceManager(bool isSequential,
-                           const TorrentMetaData &torrentMetaData,
-                           const std::string &absolutePath) : m_isSequential(isSequential),
-                                                              m_torrentMetaData(torrentMetaData)
+PieceManager::PieceManager(const TorrentMetaData &torrentMetaData,
+                           const std::string &absolutePath) : m_torrentMetaData(torrentMetaData)
 {
 /*
     std::filesystem::current_path(absolutePath);
@@ -18,6 +16,10 @@ PieceManager::PieceManager(bool isSequential,
 
 */
     m_writerThread = std::thread(&PieceManager::WriteThread, this);
+
+    m_pieceRarity.resize(m_torrentMetaData.GetPieces().size(), 0);
+
+   // m_missingPieces.insert({0,0});
 }
 
 PieceManager::~PieceManager()
@@ -32,10 +34,15 @@ PieceManager::~PieceManager()
         m_writerThread.join();
 }
 
-std::vector<utils::Message> PieceManager::LoadNextPiece()
+bool PieceManager::IsIncomplete() const
+{
+    return m_missingPieces.size() || m_onDownloadingPieces.size();
+}
+
+std::vector<utils::Message> PieceManager::LoadNextPiece(bool isSequential)
 {
     int32_t nextPiece = -1;
-    if (m_isSequential)
+    if (isSequential)
     {
         nextPiece = begin(m_missingPieces)->first;
     }
@@ -83,8 +90,11 @@ void PieceManager::AcceptBlock(const std::string &peer, utils::Message &message)
     std::string hashStr(begin(hash), end(hash));
     if (hashStr != m_torrentMetaData.GetPieces()[message.PieceIndex].GetHash())
     {
-        m_missingPieces.insert({message.PieceIndex, 0});
+        m_missingPieces.insert({message.PieceIndex, m_pieceRarity[message.PieceIndex]});
+        m_onDownloadingPieces.erase(message.PieceIndex);
+
         /// TODO: implement a request entire piece for each sender
+
         return;
     }
 
@@ -118,6 +128,8 @@ void PieceManager::SavePieceOnDisk(int32_t index, const std::vector<unsigned cha
         std::ofstream ofs(targetFile.GetPath() + targetFile.GetName(), std::ios::binary | std::ios::in | std::ios::out);
         if (!ofs)
         {
+            /// TODO:
+            // auto ec = make_error_code(utils::torrent_errc::custom_error);
             std::cerr << "Smth went wrong..." << std::endl;
             return;
         }
@@ -125,6 +137,8 @@ void PieceManager::SavePieceOnDisk(int32_t index, const std::vector<unsigned cha
         ofs.seekp(fileOffset);
         if (!ofs)
         {
+            /// TODO:
+            // auto ec = make_error_code(utils::torrent_errc::custom_error);
             std::cerr << "Error: Could not seek to position " << fileOffset << " in file " << targetFile.GetName() << std::endl;
             return;
         }
@@ -132,6 +146,8 @@ void PieceManager::SavePieceOnDisk(int32_t index, const std::vector<unsigned cha
         ofs.write(reinterpret_cast<const char *>(data.data() + dataOffset), toWrite);
         if (!ofs)
         {
+            /// TODO:
+            // auto ec = make_error_code(utils::torrent_errc::custom_error);
             std::cerr << "Error: Failed to write data to file " << targetFile.GetName() << std::endl;
             return;
         }
@@ -167,4 +183,9 @@ void PieceManager::WriteThread()
 
         SavePieceOnDisk(task.first, task.second);
     }
+}
+
+const std::unordered_map<int32_t, PieceManager::PieceData>& PieceManager::GetOnDownloading() const
+{
+    return m_onDownloadingPieces;
 }

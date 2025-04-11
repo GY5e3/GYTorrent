@@ -9,6 +9,7 @@ AnnounceResponse TrackerHTTP::Get(boost::asio::yield_context yield,
     auto [host, port] = getHostAndPortFromURL(m_url);
     boost::asio::ip::tcp::resolver resolver(m_io);
 
+    /// TODO: async_resolve doesnt guarante async DNS-resolution, probably i should create another thread for this?
     const auto endpoints = resolver.async_resolve(host, port, yield[ec]);
     if (ec) return {};
 
@@ -38,7 +39,8 @@ AnnounceResponse TrackerHTTP::Get(boost::asio::yield_context yield,
     requestBody.append((data.find("trackerid") != end(data) ? "&trackerid=" + data["trackerid"] : ""));
 
     boost::beast::http::request<boost::beast::http::string_body> request{boost::beast::http::verb::get, requestBody, 11};
-    request.set(boost::beast::http::field::host, m_stream.socket().remote_endpoint().address().to_string());
+    //request.set(boost::beast::http::field::host, m_stream.socket().remote_endpoint().address().to_string());
+    request.set(boost::beast::http::field::host, host);
     request.set(boost::beast::http::field::user_agent, BOOST_BEAST_VERSION_STRING);
     boost::beast::http::async_write(m_stream, request, yield[ec]);
     if (ec) return {};

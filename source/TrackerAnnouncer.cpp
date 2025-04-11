@@ -40,7 +40,7 @@ void TrackerAnnouncer::Update(std::shared_ptr<Tracker> tracker)
                 {"compact", std::to_string(m_compact)}};
             data["event"] = interval == 0 ? "started" : m_event;
 
-            auto response = tracker->Get(yield, data, ecTracker);
+            auto response = tracker->Get(yield, data, ecTracker);            
             if (ecTracker)
             {
                 m_activeTimers.erase(cooldown);
@@ -53,6 +53,7 @@ void TrackerAnnouncer::Update(std::shared_ptr<Tracker> tracker)
             interval = response.GetInterval();
         } 
     });
+    
 }
 
 void TrackerAnnouncer::StopAll()
