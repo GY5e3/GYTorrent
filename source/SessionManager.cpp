@@ -61,6 +61,10 @@ void SessionManager::SendMessage(const std::string &peer, const utils::Message &
         build_request(data, 5, begin(message.BitField), end(message.BitField));
         break;
     }
+    case utils::MessageID::request:
+    {
+        awaitBlock(peer, message.PieceIndex, message.Offset);
+    }
     case utils::MessageID::cancel:
     {
         int32_t mesLen = 13;
@@ -70,10 +74,6 @@ void SessionManager::SendMessage(const std::string &peer, const utils::Message &
         build_request(data, 5, message.PieceIndex);
         build_request(data, 9, message.Offset);
         build_request(data, 13, message.Length);
-    }
-    case utils::MessageID::request:
-    {
-        awaitBlock(peer, message.PieceIndex, message.Offset);
         break;
     }
     case utils::MessageID::piece:
@@ -211,7 +211,6 @@ void SessionManager::AwaitMessage(const std::string &peer)
                                   (static_cast<int32_t>(temp[6]) << 16) |
                                   (static_cast<int32_t>(temp[7]) << 8)  |
                                    static_cast<int32_t>(temp[8]);
-
                 it->second.RequestedBlocks[{incoming.PieceIndex, incoming.Offset}]->cancel();
 
                 incoming.Length = temp.size() - 9;
@@ -320,7 +319,7 @@ std::string SessionManager::GetAvailablePeer(int32_t pieceIndex, int32_t request
     {
         if (session.second.IsChokeMe == false &&
             session.second.BitField[pieceIndex] == true &&
-            session.second.RequestedBlocks.size() <= requestedBlocksCount)
+            session.second.RequestedBlocks.size() < requestedBlocksCount)
         {
             q.push({session.first, session.second.RequestedBlocks.size()});
         }

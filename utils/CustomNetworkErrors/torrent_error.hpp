@@ -11,6 +11,9 @@ enum class torrent_errc
 {
     success = 0, // 0 should not represent an error
     block_request_timeout = 1,
+    opening_file_error = 2,
+    seeking_position_error = 3,
+    writing_error = 4
 };
 
 namespace boost
@@ -49,6 +52,12 @@ namespace utils
                 return "conversion successful";
             case torrent_errc::block_request_timeout:
                 return "block was not received in set time";
+            case torrent_errc::opening_file_error:
+                return "file can not be opened";
+            case torrent_errc::seeking_position_error:
+                return "could not seek to position in file";
+            case torrent_errc::writing_error:
+                return "failed to write data to file";
             default:
                 return "unknown";
             }

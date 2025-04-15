@@ -25,9 +25,6 @@ void TorrentClient::Execute()
         }
     );
 
-    m_connectionManager = std::make_shared<ConnectionManager>(m_io, tmd, m_peerID);
-    m_pieceManager = std::make_shared<PieceManager>(tmd, m_downloadPath);
-
     m_sessionManager = std::make_shared<SessionManager>(m_io, 
         [this](const std::string& peer, const utils::Message& msg, bool isIncoming, boost::system::error_code ec) 
         {
@@ -35,8 +32,11 @@ void TorrentClient::Execute()
         }
     );
 
+    m_connectionManager = std::make_shared<ConnectionManager>(m_io, tmd, m_peerID);
+    m_pieceManager = std::make_shared<PieceManager>(tmd, m_downloadPath);
+
     auto trackerURLs = tmd.GetTrackerURLs();
-    for (size_t i = 0; i < trackerURLs.size(); i++)
+    for (size_t i = 0; i < trackerURLs.size() && i < 1; i++)
     {
         boost::system::error_code ec;
 
@@ -49,7 +49,13 @@ void TorrentClient::Execute()
         announcer->Start(tracker, ec);
             
     } 
+
+    std::thread leecherThread(&TorrentClient::LeecherMode, this);
+
     m_io.run();
+
+    if(leecherThread.joinable())
+        leecherThread.join();    
 }
 void TorrentClient::trackerCallback(const std::string &trackerURL,
                                     const std::vector<utils::Peer> &peers,
@@ -110,12 +116,31 @@ void TorrentClient::peerCallback(const std::string &peer, const utils::Message &
     }
     else if (isIncoming)
     {
-        std::cout << std::put_time(std::localtime(&now_time), "%H:%M:%S") << "-----------Peer " + peer + " send to me message " << static_cast<int>(message.MessageID) << std::endl;
+        
         if (message.MessageID == utils::MessageID::piece)
         {
+            //std::cout << std::put_time(std::localtime(&now_time), "%H:%M:%S") << "-----------Peer " + peer + " send to me message " << static_cast<int>(message.MessageID) << std::endl;
+            //std::cout << "\tindex:" << message.PieceIndex << " offset:" << message.Offset << std::endl;
+
+            m_pieceManager->AcceptBlock(peer, message);
+
+            if(m_pieceManager->IsDownloadedPiece(message.PieceIndex))
+            {
+                std::vector<unsigned char> piece;
+                boost::system::error_code ec;
+
+                if(m_pieceManager->CheckPieceHash(message.PieceIndex, piece))
+                {   
+                    m_pieceManager->SavePieceOnDisk(message.PieceIndex, piece, ec);
+                    
+                }
+                /// TODO: implement a request entire piece for each sender
+                
+            }
         }
         else if (message.MessageID == utils::MessageID::bitField)
         {
+            std::cout << std::put_time(std::localtime(&now_time), "%H:%M:%S") << "-----------Peer " + peer + " send to me message " << static_cast<int>(message.MessageID) << std::endl;
             std::cout << "BitField: " << std::endl;
             for (auto i : message.BitField)
             {
@@ -123,10 +148,15 @@ void TorrentClient::peerCallback(const std::string &peer, const utils::Message &
             }
             std::cout << std::endl;
         }
+        else 
+        {
+            std::cout << std::put_time(std::localtime(&now_time), "%H:%M:%S") << "-----------Peer " + peer + " send to me message " << static_cast<int>(message.MessageID) << std::endl;
+        }
     }
     else
     {
-        std::cout << std::put_time(std::localtime(&now_time), "%H:%M:%S") << "-----------I has sent to " + peer + " message " << static_cast<int>(message.MessageID) << std::endl;
+        if(message.MessageID != utils::MessageID::request)
+            std::cout << std::put_time(std::localtime(&now_time), "%H:%M:%S") << "-----------I has sent to " + peer + " message " << static_cast<int>(message.MessageID) << std::endl;
     }
 
     /// TODO: smth w/ incoming message in here :/
@@ -152,7 +182,7 @@ void TorrentClient::LeecherMode()
 {
     while(m_pieceManager->IsIncomplete())
     {
-        if(m_pieceManager->GetOnDownloading().size() < 5) ///TODO: It must be a constant
+        if(m_pieceManager->GetOnDownloading().size() < 5) /// TODO: It must be a constant
         {
             auto responses = m_pieceManager->LoadNextPiece(true);
             
@@ -161,9 +191,12 @@ void TorrentClient::LeecherMode()
                 m_messageQueue.push(request);
             }
         }
-        auto request = std::move(m_messageQueue.front());
+        if(m_messageQueue.empty())
+            continue;
 
-        std::string peerConcat = m_sessionManager->GetAvailablePeer(request.PieceIndex, 5);
+        auto request = m_messageQueue.front();
+
+        std::string peerConcat = m_sessionManager->GetAvailablePeer(request.PieceIndex, 5); /// TODO: It must be a constant 
 
         if(peerConcat == "")
             continue;

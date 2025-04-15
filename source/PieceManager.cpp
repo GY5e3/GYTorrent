@@ -15,23 +15,13 @@ PieceManager::PieceManager(const TorrentMetaData &torrentMetaData,
     }
 
 */
-    m_writerThread = std::thread(&PieceManager::WriteThread, this);
-
     m_pieceRarity.resize(m_torrentMetaData.GetPieces().size(), 0);
 
-   // m_missingPieces.insert({0,0});
+    m_missingPieces.insert({0,0});
 }
 
 PieceManager::~PieceManager()
 {
-    {
-        std::lock_guard<std::mutex> lock(m_queueMutex);
-        m_stop = true;
-    }
-    m_condition.notify_all();
-
-    if (m_writerThread.joinable())
-        m_writerThread.join();
 }
 
 bool PieceManager::IsIncomplete() const
@@ -41,6 +31,9 @@ bool PieceManager::IsIncomplete() const
 
 std::vector<utils::Message> PieceManager::LoadNextPiece(bool isSequential)
 {
+    if(m_missingPieces.empty())
+        return {};
+
     int32_t nextPiece = -1;
     if (isSequential)
     {
@@ -66,46 +59,39 @@ std::vector<utils::Message> PieceManager::LoadNextPiece(bool isSequential)
     return messages;
 }
 
-void PieceManager::AcceptBlock(const std::string &peer, utils::Message &message)
+void PieceManager::AcceptBlock(const std::string &peer, const utils::Message &message)
 {
     auto &pieceData = m_onDownloadingPieces[message.PieceIndex];
 
     pieceData.Senders.insert(peer);
     pieceData.RemainingBlocksCount -= pieceData.Data[message.Offset].empty();
     pieceData.Data[message.Offset] = std::move(message.Block);
+}
 
-    if (pieceData.RemainingBlocksCount)
-        return;
+bool PieceManager::IsDownloadedPiece(int32_t index)
+{
+    auto &pieceData = m_onDownloadingPieces[index];
 
-    std::vector<unsigned char> resultPiece;
-    resultPiece.reserve(m_torrentMetaData.GetPieces()[message.PieceIndex].GetLength());
-    for (auto &block : pieceData.Data)
+    return pieceData.RemainingBlocksCount == 0; 
+}
+
+bool PieceManager::CheckPieceHash(int32_t index, std::vector<unsigned char>& resultPiece)
+{
+    auto &pieceData = m_onDownloadingPieces[index];
+
+    resultPiece.resize(m_torrentMetaData.GetPieces()[index].GetLength());
+    for (auto &[offset, data] : pieceData.Data)
     {
-        resultPiece.insert(resultPiece.begin() + block.first,
-                           std::make_move_iterator(block.second.begin()),
-                           std::make_move_iterator(block.second.end()));
+        std::copy(data.begin(), data.end(), resultPiece.begin() + offset);
     }
     std::vector<unsigned char> hash(SHA_DIGEST_LENGTH);
     SHA1(resultPiece.data(), resultPiece.size(), hash.data());
     std::string hashStr(begin(hash), end(hash));
-    if (hashStr != m_torrentMetaData.GetPieces()[message.PieceIndex].GetHash())
-    {
-        m_missingPieces.insert({message.PieceIndex, m_pieceRarity[message.PieceIndex]});
-        m_onDownloadingPieces.erase(message.PieceIndex);
 
-        /// TODO: implement a request entire piece for each sender
-
-        return;
-    }
-
-    {
-        std::lock_guard<std::mutex> lock(m_queueMutex);
-        m_writeQueue.emplace(message.PieceIndex, std::move(resultPiece));
-    }
-    m_condition.notify_one();
+    return hashStr == m_torrentMetaData.GetPieces()[index].GetHash();
 }
 
-void PieceManager::SavePieceOnDisk(int32_t index, const std::vector<unsigned char> &data)
+void PieceManager::SavePieceOnDisk(int32_t index, const std::vector<unsigned char> &data, boost::system::error_code& ec)
 {
     utils::Piece piece = m_torrentMetaData.GetPieces()[index];
 
@@ -123,32 +109,33 @@ void PieceManager::SavePieceOnDisk(int32_t index, const std::vector<unsigned cha
         int64_t fileAvailableSpace = targetFile.GetSize() - fileOffset;
         int64_t toWrite = std::min(remainingData, fileAvailableSpace);
 
-        std::filesystem::create_directories(targetFile.GetPath());
+        if(!targetFile.GetPath().empty())
+            std::filesystem::create_directories(targetFile.GetPath());
 
-        std::ofstream ofs(targetFile.GetPath() + targetFile.GetName(), std::ios::binary | std::ios::in | std::ios::out);
+        std::string fullPath = targetFile.GetPath() + targetFile.GetName();
+
+        if (!std::filesystem::exists(fullPath)) {
+            std::ofstream create(fullPath, std::ios::binary);
+            create.close();
+        }
+        std::ofstream ofs(fullPath, std::ios::binary | std::ios::in | std::ios::out);
         if (!ofs)
         {
-            /// TODO:
-            // auto ec = make_error_code(utils::torrent_errc::custom_error);
-            std::cerr << "Smth went wrong..." << std::endl;
+            ec = make_error_code(torrent_errc::opening_file_error);
             return;
         }
 
         ofs.seekp(fileOffset);
         if (!ofs)
         {
-            /// TODO:
-            // auto ec = make_error_code(utils::torrent_errc::custom_error);
-            std::cerr << "Error: Could not seek to position " << fileOffset << " in file " << targetFile.GetName() << std::endl;
+            ec = make_error_code(torrent_errc::seeking_position_error);
             return;
         }
 
         ofs.write(reinterpret_cast<const char *>(data.data() + dataOffset), toWrite);
         if (!ofs)
         {
-            /// TODO:
-            // auto ec = make_error_code(utils::torrent_errc::custom_error);
-            std::cerr << "Error: Failed to write data to file " << targetFile.GetName() << std::endl;
+            ec = make_error_code(torrent_errc::writing_error);
             return;
         }
 
@@ -162,27 +149,6 @@ void PieceManager::SavePieceOnDisk(int32_t index, const std::vector<unsigned cha
 
     m_onDownloadingPieces.erase(index);
     m_downloadedPieces.insert(index);
-}
-
-void PieceManager::WriteThread()
-{
-    while (true)
-    {
-        std::pair<int32_t, std::vector<unsigned char>> task;
-        {
-            std::unique_lock<std::mutex> lock(m_queueMutex);
-            m_condition.wait(lock, [this]
-                             { return !m_writeQueue.empty() || m_stop; });
-
-            if (m_stop && m_writeQueue.empty())
-                return;
-
-            task = std::move(m_writeQueue.front());
-            m_writeQueue.pop();
-        }
-
-        SavePieceOnDisk(task.first, task.second);
-    }
 }
 
 const std::unordered_map<int32_t, PieceManager::PieceData>& PieceManager::GetOnDownloading() const

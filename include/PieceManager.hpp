@@ -12,13 +12,13 @@
 #include <condition_variable>
 #include <fstream>
 
-#include <boost/interprocess/file_mapping.hpp>
-#include <boost/interprocess/mapped_region.hpp>
+#include <boost/system/error_code.hpp>
 
 #include <openssl/sha.h>
 
 #include <TorrentMetaData.hpp>
 
+#include "CustomNetworkErrors/torrent_error.hpp"
 #include "Entities/Message.hpp"
 #include "BitTorrentConstants.hpp"
 
@@ -50,9 +50,13 @@ public:
 
     std::vector<utils::Message> LoadNextPiece(bool isSequential = false);
 
-    void AcceptBlock(const std::string& peer, utils::Message& message);
+    void AcceptBlock(const std::string& peer, const utils::Message& message);
 
-    void SavePieceOnDisk(int32_t index, const std::vector<unsigned char>& piece);
+    bool IsDownloadedPiece(int32_t index);
+
+    bool CheckPieceHash(int32_t index, std::vector<unsigned char>& resultPiece);
+
+    void SavePieceOnDisk(int32_t index, const std::vector<unsigned char>& piece, boost::system::error_code& ec);
 
     bool IsIncomplete() const;
 
@@ -71,13 +75,5 @@ private:
 
     /// @brief Stores indexes of missing pieces
     std::map<int32_t, int32_t> m_missingPieces;
-
-    std::queue<std::pair<int32_t, std::vector<unsigned char>>> m_writeQueue;
-    std::mutex m_queueMutex;
-    std::condition_variable m_condition;
-    std::thread m_writerThread;
-    bool m_stop;
-
-    void WriteThread();
 
 };
