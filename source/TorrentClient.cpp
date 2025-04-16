@@ -18,15 +18,15 @@ void TorrentClient::Execute()
     auto buffer = tmd.GetInfoHash();
     std::string infoHash(begin(buffer), end(buffer));
 
-    auto announcer = std::make_shared<TrackerAnnouncer>(m_io, infoHash, m_peerID, m_port, 
-        [this](const std::string& trackerURL, const std::vector<utils::Peer> &peers, boost::system::error_code ec)
+    auto announcer = std::make_shared<TrackerAnnouncer>(m_io, infoHash, m_peerID, m_port,
+        [this](const std::string &trackerURL, const std::vector<utils::Peer> &peers, boost::system::error_code ec)
         {
             this->trackerCallback(trackerURL, peers, ec);
         }
     );
 
-    m_sessionManager = std::make_shared<SessionManager>(m_io, 
-        [this](const std::string& peer, const utils::Message& msg, bool isIncoming, boost::system::error_code ec) 
+    m_sessionManager = std::make_shared<SessionManager>(m_io,
+        [this](const std::string &peer, const utils::Message &msg, bool isIncoming, boost::system::error_code ec)
         {
             this->peerCallback(peer, msg, isIncoming, ec);
         }
@@ -47,15 +47,24 @@ void TorrentClient::Execute()
             tracker = std::make_shared<TrackerHTTP>(m_io, trackerURLs[i]);
 
         announcer->Start(tracker, ec);
-            
-    } 
+    }
 
     std::thread leecherThread(&TorrentClient::LeecherMode, this);
+    std::thread writeThread(&TorrentClient::WritingThread, this);
 
     m_io.run();
 
-    if(leecherThread.joinable())
-        leecherThread.join();    
+    if (leecherThread.joinable())
+    {
+        leecherThread.join();
+        {
+            std::lock_guard<std::mutex> lock(m_writeMutex);
+            m_stop = true;
+        }
+        m_writeCond.notify_all();
+    }
+    if(writeThread.joinable())
+        writeThread.join();
 }
 void TorrentClient::trackerCallback(const std::string &trackerURL,
                                     const std::vector<utils::Peer> &peers,
@@ -73,10 +82,10 @@ void TorrentClient::trackerCallback(const std::string &trackerURL,
         std::cout << std::put_time(std::localtime(&now_time), "%H:%M:%S") << "-----------Update for " + trackerURL << std::endl;
     }
     for (size_t i = 0; i < peers.size(); i++)
-    {   
+    {
         std::string cur = peers[i].ToString();
 
-        if(m_sessionManager->IsActive(cur))
+        if (m_sessionManager->IsActive(cur))
             continue;
         boost::asio::spawn(m_io, [this, peer = peers[i]](boost::asio::yield_context yield)
         {
@@ -94,9 +103,9 @@ void TorrentClient::trackerCallback(const std::string &trackerURL,
                 utils::Message interested{utils::MessageID::interested};
 
                 m_sessionManager->SendMessage(peer.ToString(), interested);
-            }
+            } 
         });
-    } 
+    }
 }
 
 void TorrentClient::peerCallback(const std::string &peer, const utils::Message &message, bool isIncoming, boost::system::error_code ec)
@@ -105,37 +114,54 @@ void TorrentClient::peerCallback(const std::string &peer, const utils::Message &
     std::time_t now_time = std::chrono::system_clock::to_time_t(now);
     if (ec == torrent_errc::block_request_timeout)
     {
-        m_sessionManager->Stop(peer);
+        m_messageQueue.push(message);
+       // {
+        //    std::lock_guard<std::mutex> lock(m_sessionMutex);
+
+            utils::Message cancel;
+            cancel.MessageID = utils::MessageID::cancel;
+            cancel.PieceIndex = message.PieceIndex;
+            cancel.Offset = message.Offset;
+
+            m_sessionManager->SendMessage(peer, cancel);
+        //}
         std::cout << std::put_time(std::localtime(&now_time), "%H:%M:%S") << "-----------Peer " + peer + " error: " + ec.message() << std::endl;
-        /// TODO: implement logic to return blocks to the general queue
     }
     else if (ec)
     {
+        for(auto request : m_sessionManager->GetRequestedBlocks(peer))
+            m_messageQueue.push(request);
         m_sessionManager->Stop(peer);
         std::cout << std::put_time(std::localtime(&now_time), "%H:%M:%S") << "-----------Peer " + peer + " error: " + ec.message() << std::endl;
     }
     else if (isIncoming)
     {
-        
-        if (message.MessageID == utils::MessageID::piece)
+        if (message.MessageID == utils::MessageID::choke)
+        {
+            std::cout << std::put_time(std::localtime(&now_time), "%H:%M:%S") << "-----------Peer " + peer + " send to me message " << static_cast<int>(message.MessageID) << std::endl;
+            for(auto request : m_sessionManager->GetRequestedBlocks(peer))
+                m_messageQueue.push(request);
+        }
+        else if (message.MessageID == utils::MessageID::piece)
         {
             //std::cout << std::put_time(std::localtime(&now_time), "%H:%M:%S") << "-----------Peer " + peer + " send to me message " << static_cast<int>(message.MessageID) << std::endl;
             //std::cout << "\tindex:" << message.PieceIndex << " offset:" << message.Offset << std::endl;
 
             m_pieceManager->AcceptBlock(peer, message);
 
-            if(m_pieceManager->IsDownloadedPiece(message.PieceIndex))
+            if (m_pieceManager->IsDownloadedPiece(message.PieceIndex))
             {
                 std::vector<unsigned char> piece;
-                boost::system::error_code ec;
 
-                if(m_pieceManager->CheckPieceHash(message.PieceIndex, piece))
-                {   
-                    m_pieceManager->SavePieceOnDisk(message.PieceIndex, piece, ec);
-                    
+                if (m_pieceManager->CheckPieceHash(message.PieceIndex, piece))
+                {
+                    {
+                        std::lock_guard<std::mutex> lock(m_writeMutex);
+                        m_writeQueue.emplace(message.PieceIndex, std::move(piece));
+                    }
+                    m_writeCond.notify_one();
                 }
                 /// TODO: implement a request entire piece for each sender
-                
             }
         }
         else if (message.MessageID == utils::MessageID::bitField)
@@ -148,14 +174,14 @@ void TorrentClient::peerCallback(const std::string &peer, const utils::Message &
             }
             std::cout << std::endl;
         }
-        else 
+        else
         {
             std::cout << std::put_time(std::localtime(&now_time), "%H:%M:%S") << "-----------Peer " + peer + " send to me message " << static_cast<int>(message.MessageID) << std::endl;
         }
     }
     else
     {
-        if(message.MessageID != utils::MessageID::request)
+        if (message.MessageID != utils::MessageID::request)
             std::cout << std::put_time(std::localtime(&now_time), "%H:%M:%S") << "-----------I has sent to " + peer + " message " << static_cast<int>(message.MessageID) << std::endl;
     }
 
@@ -177,32 +203,65 @@ std::string TorrentClient::generatePeerID() const
 
     return peerID;
 }
+void TorrentClient::WritingThread()
+{
+    while (true)
+    {
+        std::pair<int32_t, std::vector<unsigned char>> task;
 
+        {
+            std::unique_lock<std::mutex> lock(m_writeMutex);
+
+            m_writeCond.wait(lock, [this] { return !m_writeQueue.empty() || m_stop; });
+
+            if (m_stop && m_writeQueue.empty())
+                break;
+            task = std::move(m_writeQueue.front());
+            m_writeQueue.pop();
+        }
+        boost::system::error_code ec;
+        if (m_pieceManager)
+            m_pieceManager->SavePieceOnDisk(task.first, task.second, ec);
+        
+        auto now = std::chrono::system_clock::now();
+        std::time_t now_time = std::chrono::system_clock::to_time_t(now);
+        if (!ec)
+        {
+            std::cout << std::put_time(std::localtime(&now_time), "%H:%M:%S") << "-----------Success downloading piece " << task.first << std::endl;
+        }
+    }
+}
 void TorrentClient::LeecherMode()
 {
-    while(m_pieceManager->IsIncomplete())
+    while (m_pieceManager->IsIncomplete())
     {
-        if(m_pieceManager->GetOnDownloading().size() < 5) /// TODO: It must be a constant
+        
+        if (m_pieceManager->GetOnDownloading().size() < 5) /// TODO: It must be a constant
         {
             auto responses = m_pieceManager->LoadNextPiece(true);
-            
-            for(auto request : responses)
+
+            for (auto request : responses)
             {
                 m_messageQueue.push(request);
             }
         }
-        if(m_messageQueue.empty())
+        if (m_messageQueue.empty())
             continue;
+
+        
 
         auto request = m_messageQueue.front();
 
-        std::string peerConcat = m_sessionManager->GetAvailablePeer(request.PieceIndex, 5); /// TODO: It must be a constant 
+        std::string peerConcat = m_sessionManager->GetAvailablePeer(request.PieceIndex, 5); /// TODO: It must be a constant
 
-        if(peerConcat == "")
+        if (peerConcat == "")
             continue;
 
         m_messageQueue.pop();
-        
-        m_sessionManager->SendMessage(peerConcat, request);
+        //{
+        //    std::lock_guard<std::mutex> lock(m_sessionMutex);
+            m_sessionManager->SendMessage(peerConcat, request);
+        //}
     }
+    std::cout << "FULL SUCCESS!!" << std::endl;
 }

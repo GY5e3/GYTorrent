@@ -84,7 +84,7 @@ void SessionManager::SendMessage(const std::string &peer, const utils::Message &
         data[4] = static_cast<int32_t>(message.MessageID);
         build_request(data, 5, message.PieceIndex);
         build_request(data, 9, message.Offset);
-        build_request(data, 13, begin(message.BitField), end(message.BitField));
+        build_request(data, 13, begin(message.Block), end(message.Block));
         break;
     }
     case utils::MessageID::port:
@@ -114,20 +114,21 @@ void SessionManager::SendMessage(const std::string &peer, const utils::Message &
 
 void SessionManager::AwaitMessage(const std::string &peer)
 {
-    auto it = m_sessions.find(peer);
-    if (it == m_sessions.end())
-    {
-        /// TODO:
-        // auto ec = make_error_code(utils::torrent_errc::custom_error);
-        // m_callback(peer, {}, false, ec);
-        return;
-    }
-    boost::asio::spawn(m_io, [this, it, peer](boost::asio::yield_context yield)
+    boost::asio::spawn(m_io, [this, peer](boost::asio::yield_context yield)
     {
         boost::system::error_code ec;
         
         while (true)
         {
+            auto it = m_sessions.find(peer);
+            if (it == m_sessions.end())
+            {
+                /// TODO:
+                // auto ec = make_error_code(utils::torrent_errc::custom_error);
+                // m_callback(peer, {}, false, ec);
+                break;
+            }
+
             auto temp = it->second.Interact.Recieve(yield, ec);
             if (ec)
             {
@@ -142,6 +143,8 @@ void SessionManager::AwaitMessage(const std::string &peer)
             case utils::MessageID::choke:
             {
                 it->second.IsChokeMe = true;
+                //for (auto &[blockInfo, timer] : it->second.RequestedBlocks)
+                  //  timer->cancel();
                 break;
             }
             case utils::MessageID::unchoke:
@@ -211,7 +214,10 @@ void SessionManager::AwaitMessage(const std::string &peer)
                                   (static_cast<int32_t>(temp[6]) << 16) |
                                   (static_cast<int32_t>(temp[7]) << 8)  |
                                    static_cast<int32_t>(temp[8]);
-                it->second.RequestedBlocks[{incoming.PieceIndex, incoming.Offset}]->cancel();
+
+                auto itTimer = it->second.RequestedBlocks.find({incoming.PieceIndex, incoming.Offset});
+                if (itTimer != it->second.RequestedBlocks.end() && itTimer->second)
+                    itTimer->second->cancel();
 
                 incoming.Length = temp.size() - 9;
                 incoming.Block.assign(temp.begin() + 9, temp.end());
@@ -231,20 +237,20 @@ void SessionManager::AwaitMessage(const std::string &peer)
 
 void SessionManager::Update(const std::string &peer)
 {
-    auto it = m_sessions.find(peer);
-    if (it == m_sessions.end())
-    {
-        /// TODO:
-        // auto ec = make_error_code(utils::torrent_errc::custom_error);
-        // m_callback(peer, {}, false, ec);
-        return;
-    }
-    boost::asio::spawn(m_io, [this, it, peer](boost::asio::yield_context yield)
+    boost::asio::spawn(m_io, [this, peer](boost::asio::yield_context yield)
     {
         boost::system::error_code ec;
         
         while (true)
         {
+            auto it = m_sessions.find(peer);
+            if (it == m_sessions.end())
+            {
+                /// TODO:
+                // auto ec = make_error_code(utils::torrent_errc::custom_error);
+                // m_callback(peer, {}, false, ec);
+                return;
+            }
             it->second.KeepAliveTimer.expires_after(std::chrono::seconds(120));
             it->second.KeepAliveTimer.async_wait(yield[ec]);
             if (ec) break; 
@@ -266,12 +272,10 @@ void SessionManager::Stop(const std::string &peer)
     }
 
     it->second.KeepAliveTimer.cancel();
-    for (auto timers : it->second.RequestedBlocks)
+    for (auto &[blockInfo, timer] : it->second.RequestedBlocks)
     {
-        timers.second->cancel();
-
-        boost::system::error_code torrentEC = make_error_code(torrent_errc::block_request_timeout);
-        m_callback(peer, {}, false, torrentEC);
+        timer->cancel();
+        /// TODO: try to find a way to switch the execution context immediately
     }
 
     m_sessions.erase(peer);
@@ -286,17 +290,21 @@ void SessionManager::awaitBlock(const std::string &peer, int32_t pieceIndex, int
         boost::system::error_code timerEC;
         blockTimer->expires_after(std::chrono::seconds(10));
         blockTimer->async_wait(yield[timerEC]);
-        m_sessions.find(peer)->second.RequestedBlocks.erase({pieceIndex, offset});
+
+        auto it = m_sessions.find(peer);
+        if (it != end(m_sessions)) 
+            it->second.RequestedBlocks.erase({pieceIndex, offset});
+        
         if(!timerEC)
         {
             boost::system::error_code torrentEC = make_error_code(torrent_errc::block_request_timeout);
-            m_callback(peer, {}, false, torrentEC);
 
             utils::Message message;
-            message.MessageID = utils::MessageID::cancel;
+            message.MessageID = utils::MessageID::request;
             message.PieceIndex = pieceIndex;
             message.Offset = offset;
-            SendMessage(peer, message);
+
+            m_callback(peer, message, false, torrentEC);
         } 
     });
 }
@@ -315,16 +323,36 @@ std::string SessionManager::GetAvailablePeer(int32_t pieceIndex, int32_t request
                         decltype(comparator)>
         q(comparator);
 
-    for (const auto &session : m_sessions)
+    for (const auto &[peer, session] : m_sessions)
     {
-        if (session.second.IsChokeMe == false &&
-            session.second.BitField[pieceIndex] == true &&
-            session.second.RequestedBlocks.size() < requestedBlocksCount)
+        if (session.IsChokeMe == false &&
+            session.BitField.size() > pieceIndex && session.BitField[pieceIndex] == true &&
+            session.RequestedBlocks.size() < requestedBlocksCount)
         {
-            q.push({session.first, session.second.RequestedBlocks.size()});
+            q.push({peer, session.RequestedBlocks.size()});
         }
     }
     return q.size() ? q.top().first : "";
+}
+
+std::vector<utils::Message> SessionManager::GetRequestedBlocks(const std::string &peer) const
+{
+    std::vector<utils::Message> messages;
+    auto it = m_sessions.find(peer);
+    if(it == end(m_sessions))
+    {
+        return {};
+    }
+    for(auto& [blockInfo, timer] : it->second.RequestedBlocks)
+    {
+        utils::Message message;
+        message.MessageID = utils::MessageID::request;
+        message.PieceIndex = blockInfo.first;
+        message.Offset = blockInfo.second;
+
+        messages.push_back(message);
+    }
+    return messages;
 }
 
 bool SessionManager::IsActive(const std::string &peer) const

@@ -17,7 +17,8 @@ PieceManager::PieceManager(const TorrentMetaData &torrentMetaData,
 */
     m_pieceRarity.resize(m_torrentMetaData.GetPieces().size(), 0);
 
-    m_missingPieces.insert({0,0});
+    for(size_t i = 0; i < m_torrentMetaData.GetPieces().size(); i++)
+        m_missingPieces.insert({i,0});
 }
 
 PieceManager::~PieceManager()
@@ -50,7 +51,9 @@ std::vector<utils::Message> PieceManager::LoadNextPiece(bool isSequential)
     int64_t pieceSize = m_torrentMetaData.GetPieces()[nextPiece].GetLength();
     for (int32_t blockOffset = 0; blockOffset < pieceSize; blockOffset += utils::BLOCK_SIZE)
     {
-        messages.push_back(utils::Message{utils::MessageID::request, nextPiece, blockOffset, utils::BLOCK_SIZE});
+        int32_t blockSize = pieceSize - blockOffset < utils::BLOCK_SIZE ? pieceSize - blockOffset : utils::BLOCK_SIZE;
+
+        messages.push_back(utils::Message{utils::MessageID::request, nextPiece, blockOffset, blockSize});
 
         m_onDownloadingPieces[nextPiece].Data.insert({blockOffset, std::vector<unsigned char>()});
     }

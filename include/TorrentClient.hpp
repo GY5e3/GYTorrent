@@ -40,8 +40,15 @@ private:
     std::vector<bool> m_bitField;
 
     std::queue<utils::Message> m_messageQueue;
+    
+    std::mutex m_writeMutex;
+    std::condition_variable m_writeCond;
+    std::queue<std::pair<int32_t, std::vector<unsigned char>>> m_writeQueue;
+    std::atomic<bool> m_stop{false};
 
+    std::mutex m_sessionMutex;
     std::shared_ptr<SessionManager> m_sessionManager;
+
     std::shared_ptr<ConnectionManager> m_connectionManager;
     std::shared_ptr<PieceManager> m_pieceManager;
 
@@ -56,4 +63,6 @@ private:
     std::string generatePeerID() const;
 
     void LeecherMode();
+
+    void WritingThread();
 };

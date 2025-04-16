@@ -30,7 +30,10 @@ public:
 
     std::string GetAvailablePeer(int32_t pieceIndex, int32_t requstedBlocksCount) const;
 
+    std::vector<utils::Message> GetRequestedBlocks(const std::string &peer) const;
+
     bool IsActive(const std::string &peer) const;
+
 private:
     utils::build_request build_request;
 
